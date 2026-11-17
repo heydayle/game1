@@ -7,6 +7,8 @@ import { BiogeochemicalHUD } from "./features/environment/components/Biogeochemi
 import { EcosystemHUD } from "./features/evolution/components/EcosystemHUD.js";
 import { GenesisModal } from "./features/genesis/components/GenesisModal.js";
 import { SaveManagerModal } from "./features/persistence/components/SaveManagerModal.js";
+import { useAutoSave } from "./features/persistence/hooks/useAutoSave.js";
+import { AutoSaveService } from "./features/persistence/services/AutoSaveService.js";
 import { Planet } from "./features/planet/components/Planet.js";
 import { PlanetInspectHUD } from "./features/planet/components/PlanetInspectHUD.js";
 import type { PlanetInspectData } from "./features/planet/components/PlanetSurface.js";
@@ -51,11 +53,25 @@ export default function App() {
   const [isSoundMuted, setIsSoundMuted] = useState(() => SoundFX.getMuted());
   const isRestoringSaveRef = useRef(false);
 
-  // Check first-time user welcome modal
+  // Auto-Save Lifecycle: restores on load, saves on exit / beforeunload / visibilitychange
+  const { restoredToast, dismissToast } = useAutoSave({
+    isReady,
+    currentPlanet,
+    rotations: snapshot.rotations,
+    exportState,
+    loadState,
+    loadPlanet,
+    onRestoringSave: () => {
+      isRestoringSaveRef.current = true;
+    },
+  });
+
+  // Check first-time user welcome modal (only if no existing auto-save)
   useEffect(() => {
     if (typeof localStorage !== "undefined") {
       const welcomed = localStorage.getItem("evolution_sandbox_welcomed");
-      if (!welcomed) {
+      const hasAutoSave = AutoSaveService.hasCachedAutoSave();
+      if (!welcomed && !hasAutoSave) {
         setIsWelcomeModalOpen(true);
       }
     }
@@ -218,6 +234,21 @@ export default function App() {
           onInspect={setInspectData}
         />
       </SceneCanvas>
+
+      {/* Auto-Restored Session Banner Toast */}
+      {restoredToast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 rounded-lg border border-cyan-500/40 bg-gray-950/90 px-4 py-2 font-mono text-xs text-cyan-300 shadow-xl shadow-cyan-950/40 backdrop-blur-md">
+          <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+          <span>{restoredToast}</span>
+          <button
+            onClick={dismissToast}
+            className="ml-2 text-gray-400 hover:text-white transition-colors"
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Floating HUD toggle pill when HUDs are hidden (Cinematic mode) */}
       {!isHudVisible && (

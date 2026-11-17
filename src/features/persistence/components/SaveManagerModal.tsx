@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { IndexedDBService } from '../services/IndexedDBService.js'
 import { SaveValidator } from '../services/SaveValidator.js'
+import { AUTOSAVE_SAVE_ID } from '../services/AutoSaveService.js'
 import type { WorldSave, WorldSaveMetadata } from '../types.js'
 import type { PlanetConfig } from '../../genesis/types/genesis.js'
 
@@ -265,6 +266,11 @@ export function SaveManagerModal({
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-white text-xs">{meta.name}</span>
+                        {meta.saveId === AUTOSAVE_SAVE_ID && (
+                          <span className="rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.2 text-[9px] font-bold uppercase font-mono">
+                            ⚡ Auto-Save
+                          </span>
+                        )}
                         <span
                           className={`rounded px-1.5 py-0.2 text-[10px] font-bold uppercase ${
                             isPrebiotic
