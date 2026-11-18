@@ -3,6 +3,10 @@ import { PopulationManager, MAX_CARRYING_CAPACITY } from '../PopulationManager.j
 import { SeededRNG } from '../../../../shared/utils/seeded-rng.js'
 import { GenesisEngine } from '../../../genesis/services/GenesisEngine.js'
 import type { PlanetConfig } from '../../../genesis/types/genesis.js'
+import { Species } from '../Species.js'
+import { Organism } from '../Organism.js'
+import { PrebioticEngine } from '../../abiogenesis/PrebioticEngine.js'
+import type { SpeciationEvent } from '../../taxonomy/types.js'
 
 describe('PopulationManager', () => {
   let manager: PopulationManager
@@ -178,5 +182,366 @@ describe('PopulationManager', () => {
     expect(resurgenceStep.prebioticState.stage).toBe('inhabited')
     expect(resurgenceStep.speciesSummaries.length).toBeGreaterThan(0)
   })
-})
 
+  it('supports continuous chemical catalysts and de novo biogenesis in an inhabited biosphere', () => {
+    manager.initPlanet(planetConfig)
+    const rng = new SeededRNG(101)
+
+    // Spark initial life
+    manager.sparkBiogenesis(planetConfig, rng)
+    const initialSpeciesCount = manager.getSpeciesList().length
+    expect(initialSpeciesCount).toBe(1)
+
+    // Trigger interactive catalysts in living world
+    manager.triggerChemicalCatalyst('spark')
+    manager.triggerChemicalCatalyst('vent')
+
+    // Step simulation - verify prebiotic state runs parallel in inhabited era
+    const stepResult = manager.step(1, planetConfig, rng)
+    expect(stepResult.prebioticState.stage).toBe('inhabited')
+    expect(stepResult.prebioticState.chemicalPhase).toBe('biogeochemical_flux')
+    expect(stepResult.prebioticState.bioticFeedbackFlux).toBeGreaterThan(0)
+
+    // Trigger de novo microbial synthesis from saturated chemical reservoir
+    const newSpecies = manager.triggerDeNovoBiogenesis(planetConfig, rng, 20, 1)
+    expect(newSpecies).not.toBeNull()
+    expect(manager.getSpeciesList().length).toBe(2)
+
+    // Ensure de novo speciation event was recorded
+    const nextStep = manager.step(2, planetConfig, rng)
+    const deNovoEvent = nextStep.speciationEvents.find(
+      (e) => e.eventType === 'de_novo_chemical_synthesis'
+    )
+    expect(deNovoEvent).toBeDefined()
+    expect(deNovoEvent?.description).toContain('Khởi sinh hóa học song song')
+  })
+
+  it('enforces strict trophic food chain dependency: predators/herbivores collapse without lower food sources', () => {
+    manager.initPlanet(planetConfig)
+    const rng = new SeededRNG(555)
+
+    // Create a mock carnivore species with 0 prey/herbivores on the planet
+    const prebioticEngine = new PrebioticEngine()
+    const carnivoreGenotype = prebioticEngine.generatePrimordialGenotype(
+      planetConfig,
+      'carbon_organic'
+    )
+
+    const carnivoreSpecies = new Species(
+      'sp_carnivore_only',
+      'Thú Ăn Thịt Cô Đơn',
+      carnivoreGenotype,
+      1,
+      0,
+      '#f43f5e'
+    )
+
+    // Seed carnivores into manager directly without any producers or prey
+    const carnivores = [
+      new Organism('org_c1', 'sp_carnivore_only', carnivoreGenotype, 1, 8.0, 1, 0),
+      new Organism('org_c2', 'sp_carnivore_only', carnivoreGenotype, 1, 8.0, 1, 0),
+    ]
+
+    manager.restoreState(
+      {
+        currentGeneration: 1,
+        nextOrganismId: 10,
+        nextSpeciesId: 5,
+        species: [
+          {
+            id: carnivoreSpecies.id,
+            name: carnivoreSpecies.name,
+            color: carnivoreSpecies.color,
+            generation: 1,
+            emergenceRotation: 1,
+            isExtinct: false,
+            extinctionRotation: null,
+            foundingGenotype: carnivoreGenotype,
+          },
+        ],
+        organisms: carnivores.map((c) => ({
+          id: c.id,
+          speciesId: c.speciesId,
+          genotype: c.genotype,
+          generation: c.generation,
+          energy: c.energy,
+          cohortWeight: c.cohortWeight,
+          cellId: c.cellId,
+          ageRotations: c.ageRotations,
+          fitness: c.fitness,
+        })),
+        prebiotic: {
+          stage: 'inhabited',
+          organicComplexity: 1.0,
+        },
+      },
+      planetConfig
+    )
+
+    // Ensure the restored species has carnivore traits for test verification
+    const sp = manager.getSpeciesList()[0]!
+    sp.traits = {
+      ...sp.traits,
+      trophicRole: 'carnivore',
+      tier: 'advanced',
+    }
+
+    // Step 1: Without prey, carnivores experience severe starvation and cannot reproduce
+    manager.step(1, planetConfig, rng)
+
+    // Verify energy drained and population cannot expand
+    const remainingCarnivores = manager.getOrganisms()
+    // If any survived step 1, their energy should have dropped significantly
+    for (const org of remainingCarnivores) {
+      expect(org.energy).toBeLessThan(8.0)
+    }
+
+    // Step several more rotations: with no food source at all, they must go extinct
+    for (let r = 2; r <= 8; r++) {
+      manager.step(r, planetConfig, rng)
+    }
+
+    // Population collapsed to 0
+    expect(manager.getOrganisms().length).toBe(0)
+  })
+
+  it('microorganisms develop at massive scale with high biodiversity and rapid speciation', () => {
+    manager.seedPrimordialLife(planetConfig, 30)
+    const rng = new SeededRNG(999)
+
+    const allEmittedSpeciationEvents: SpeciationEvent[] = []
+
+    // Run 30 rotations of evolutionary simulation
+    let latestSummary = manager.step(1, planetConfig, rng)
+    allEmittedSpeciationEvents.push(...latestSummary.speciationEvents)
+    for (let r = 2; r <= 35; r++) {
+      latestSummary = manager.step(r, planetConfig, rng)
+      allEmittedSpeciationEvents.push(...latestSummary.speciationEvents)
+    }
+
+    // 1. Massive scale: total population (cohort weights) should expand significantly
+    expect(latestSummary.totalPopulation).toBeGreaterThan(100)
+
+    // 2. High biodiversity: speciation distance threshold 0.12 and higher mutation rate 0.12 produce multiple active microbial strains
+    const speciesList = manager.getSpeciesList()
+    expect(speciesList.length).toBeGreaterThanOrEqual(3)
+
+    // 3. Speciation events are properly recorded with tier descriptions
+    expect(allEmittedSpeciationEvents.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('flora strictly depends on microbial biomass and flourishes under high microbial biodiversity', () => {
+    const rng = new SeededRNG(777)
+    const prebioticEngine = new PrebioticEngine()
+    const plantGenotype = prebioticEngine.generatePrimordialGenotype(
+      planetConfig,
+      'carbon_organic'
+    )
+
+    // Scenario A: Flora without microbial foundation (globalMicrobeBiomass = 0)
+    const plantSpeciesOnly = new Species(
+      'sp_flora_isolated',
+      'Thảo Mộc Cô Lập',
+      plantGenotype,
+      1,
+      0,
+      '#10b981'
+    )
+
+    manager.restoreState(
+      {
+        currentGeneration: 1,
+        nextOrganismId: 20,
+        nextSpeciesId: 5,
+        species: [
+          {
+            id: plantSpeciesOnly.id,
+            name: plantSpeciesOnly.name,
+            color: plantSpeciesOnly.color,
+            generation: 1,
+            emergenceRotation: 1,
+            isExtinct: false,
+            extinctionRotation: null,
+            foundingGenotype: plantGenotype,
+          },
+        ],
+        organisms: [
+          new Organism('org_p1', 'sp_flora_isolated', plantGenotype, 1, 8.0, 5, 0),
+          new Organism('org_p2', 'sp_flora_isolated', plantGenotype, 1, 8.0, 5, 0),
+        ].map((o) => ({
+          id: o.id,
+          speciesId: o.speciesId,
+          genotype: o.genotype,
+          generation: o.generation,
+          energy: o.energy,
+          cohortWeight: o.cohortWeight,
+          cellId: o.cellId,
+          ageRotations: o.ageRotations,
+          fitness: o.fitness,
+        })),
+        prebiotic: {
+          stage: 'inhabited',
+          organicComplexity: 1.0,
+        },
+      },
+      planetConfig
+    )
+
+    const floraSp = manager.getSpeciesList()[0]!
+    floraSp.traits = {
+      ...floraSp.traits,
+      domain: 'flora',
+      domainLabel: 'Thực Vật',
+      tier: 'simple_multicellular',
+      trophicRole: 'producer',
+    }
+
+    // Step 1: Without microbial biomass (<= 10), flora cannot reproduce
+    manager.step(1, planetConfig, rng)
+    // No new offspring should have been created without microbial foundation
+    const floraAfterStep1 = manager.getOrganisms()
+    expect(floraAfterStep1.length).toBeLessThanOrEqual(2)
+
+    // Scenario B: Flora WITH thriving microbial foundation
+    const microbeGenotype = prebioticEngine.generatePrimordialGenotype(
+      planetConfig,
+      'carbon_organic'
+    )
+    const microbeSpecies = new Species(
+      'sp_microbe_foundation',
+      'Vi Sinh Nền Tảng',
+      microbeGenotype,
+      1,
+      1,
+      '#06b6d4'
+    )
+
+    manager.restoreState(
+      {
+        currentGeneration: 1,
+        nextOrganismId: 100,
+        nextSpeciesId: 10,
+        species: [
+          {
+            id: plantSpeciesOnly.id,
+            name: plantSpeciesOnly.name,
+            color: plantSpeciesOnly.color,
+            generation: 1,
+            emergenceRotation: 1,
+            isExtinct: false,
+            extinctionRotation: null,
+            foundingGenotype: plantGenotype,
+          },
+          {
+            id: microbeSpecies.id,
+            name: microbeSpecies.name,
+            color: microbeSpecies.color,
+            generation: 1,
+            emergenceRotation: 1,
+            isExtinct: false,
+            extinctionRotation: null,
+            foundingGenotype: microbeGenotype,
+          },
+        ],
+        organisms: [
+          // Thriving microbial bedrock: 100 biomass
+          new Organism('org_m1', 'sp_microbe_foundation', microbeGenotype, 1, 10.0, 100, 0),
+          // Flora organism
+          new Organism('org_p_rich', 'sp_flora_isolated', plantGenotype, 1, 8.0, 10, 0),
+          new Organism('org_p_rich2', 'sp_flora_isolated', plantGenotype, 1, 8.0, 10, 0),
+        ].map((o) => ({
+          id: o.id,
+          speciesId: o.speciesId,
+          genotype: o.genotype,
+          generation: o.generation,
+          energy: o.energy,
+          cohortWeight: o.cohortWeight,
+          cellId: o.cellId,
+          ageRotations: o.ageRotations,
+          fitness: o.fitness,
+        })),
+        prebiotic: {
+          stage: 'inhabited',
+          organicComplexity: 1.0,
+        },
+      },
+      planetConfig
+    )
+
+    const restoredFlora = manager.getSpeciesList().find((s) => s.id === 'sp_flora_isolated')!
+    restoredFlora.traits = {
+      ...restoredFlora.traits,
+      domain: 'flora',
+      domainLabel: 'Thực Vật',
+      tier: 'simple_multicellular',
+      trophicRole: 'producer',
+    }
+
+    const restoredMicrobe = manager.getSpeciesList().find((s) => s.id === 'sp_microbe_foundation')!
+    restoredMicrobe.traits = {
+      ...restoredMicrobe.traits,
+      domain: 'microbe',
+      tier: 'unicellular',
+      trophicRole: 'producer',
+    }
+
+    // Step with thriving microbial foundation: flora reproduces successfully and thrives!
+    manager.step(1, planetConfig, rng)
+    const floraAfterSymbiosis = manager
+      .getOrganisms()
+      .filter((o) => o.speciesId === 'sp_flora_isolated')
+    expect(floraAfterSymbiosis.length).toBeGreaterThan(0)
+    // Flora should have maintained or gained energy from microbial nutrient symbiosis
+    expect(floraAfterSymbiosis[0]!.energy).toBeGreaterThan(5.0)
+  })
+
+  it('follows the sequential 6-stage biological milestone pathway and never jumps directly from microbes to fauna', () => {
+    manager.seedPrimordialLife(planetConfig, 40)
+    const rng = new SeededRNG(777)
+
+    // Run 30 rotations
+    for (let r = 1; r <= 30; r++) {
+      manager.step(r, planetConfig, rng)
+    }
+
+    const species = manager.getSpeciesList()
+    expect(species.length).toBeGreaterThanOrEqual(1)
+
+    for (const sp of species) {
+      expect([
+        'prokaryote',
+        'eukaryote',
+        'simple_multicellular',
+        'differentiated_tissue',
+        'primitive_animal',
+        'complex_bilaterian',
+        'advanced',
+        'sapient',
+        'unicellular',
+        'complex_multicellular',
+      ]).toContain(sp.traits.tier)
+
+      // Microbes / prokaryotes / eukaryotes / simple multicellular / differentiated tissue CANNOT be fauna
+      if (
+        sp.traits.tier === 'prokaryote' ||
+        sp.traits.tier === 'eukaryote' ||
+        sp.traits.tier === 'simple_multicellular' ||
+        sp.traits.tier === 'differentiated_tissue' ||
+        sp.traits.tier === 'unicellular'
+      ) {
+        expect(sp.traits.domain).not.toBe('fauna')
+      }
+
+      // If fauna exists, it must be primitive_animal, complex_bilaterian, advanced, or sapient
+      if (sp.traits.domain === 'fauna') {
+        expect([
+          'primitive_animal',
+          'complex_bilaterian',
+          'advanced',
+          'sapient',
+          'complex_multicellular',
+        ]).toContain(sp.traits.tier)
+      }
+    }
+  })
+})

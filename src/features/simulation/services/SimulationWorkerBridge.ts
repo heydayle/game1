@@ -20,6 +20,7 @@ import type {
 import type { PlanetConfig } from '../../genesis/types/genesis.js'
 import type { DisasterType } from '../../disasters/types.js'
 import type { WorldSave } from '../../persistence/types.js'
+import type { ChemicalCatalystType } from '../../evolution/abiogenesis/types.js'
 
 export type SnapshotListener = (snapshot: SimulationSnapshot) => void
 export type ErrorListener = (message: string, code: string) => void
@@ -129,6 +130,10 @@ export class SimulationWorkerBridge {
 
   sparkBiogenesis(): void {
     this.sendCommand({ type: 'spark-biogenesis' })
+  }
+
+  catalyzeChemistry(catalystType: ChemicalCatalystType): void {
+    this.sendCommand({ type: 'catalyze-chemistry', catalystType })
   }
 
   exportState(saveName?: string): Promise<WorldSave> {

@@ -37,7 +37,7 @@ describe('PrebioticEngine', () => {
     expect(chem.chemicalFertility).toBeLessThan(0.3)
   })
 
-  it('accumulates organic complexity over simulation rotations', () => {
+  it('accumulates organic complexity over simulation rotations through phases', () => {
     expect(engine.getOrganicComplexity()).toBe(0)
 
     for (let r = 1; r <= 10; r++) {
@@ -45,6 +45,24 @@ describe('PrebioticEngine', () => {
     }
 
     expect(engine.getOrganicComplexity()).toBeGreaterThan(0.15)
+    expect(engine.getMonomerConcentration()).toBeGreaterThan(0)
+  })
+
+  it('progresses through chemical evolution phases from monomers to protocells', () => {
+    let state = engine.step(1, temperatePlanet)
+    expect(state.chemicalPhase).toBe('monomer_synthesis')
+    expect(state.chemicalPhaseLabel).toContain('Monomer')
+
+    // Accelerate monomers and polymers
+    engine.catalyzeSpark()
+    engine.catalyzeSpark()
+    engine.catalyzeVent()
+
+    state = engine.step(2, temperatePlanet)
+    expect(state.monomerConcentration).toBeGreaterThanOrEqual(0.3)
+    expect(['polymer_formation', 'protocell_assembly', 'microbial_emergence']).toContain(
+      state.chemicalPhase
+    )
   })
 
   it('flags biogenesisReadiness when organic complexity crosses threshold', () => {
@@ -80,6 +98,54 @@ describe('PrebioticEngine', () => {
     expect(genotype.genes.thermalOptimum.alleleA.value).toBeGreaterThanOrEqual(0.7)
   })
 
+  it('maintains continuous parallel chemical evolution during inhabited era with biotic feedback', () => {
+    engine.setStage('inhabited')
+    engine.setMonomerConcentration(0.3)
+    engine.setPolymerComplexity(0.4)
+    engine.setProtocellStability(0.3)
+
+    // Advance with biological biomass and active species present
+    const state = engine.step(1, temperatePlanet, undefined, 250, 4)
+
+    expect(state.stage).toBe('inhabited')
+    expect(state.chemicalPhase).toBe('biogeochemical_flux')
+    expect(state.chemicalPhaseLabel).toContain('Tuần hoàn Hóa sinh quyển')
+    expect(state.bioticFeedbackFlux).toBeGreaterThan(0.3)
+    expect(state.organicPoolVolume).toBeGreaterThan(0)
+    expect(state.statusDescription).toContain('Parallel chemical synthesis flux')
+  })
+
+  it('supports interactive catalysts (Miller-Urey spark and vent)', () => {
+    const initMonomer = engine.getMonomerConcentration()
+    engine.catalyzeSpark()
+    expect(engine.getMonomerConcentration()).toBeGreaterThan(initMonomer)
+
+    const initPolymer = engine.getPolymerComplexity()
+    engine.catalyzeVent()
+    expect(engine.getPolymerComplexity()).toBeGreaterThan(initPolymer)
+    expect(engine.getProtocellStability()).toBeGreaterThan(0)
+  })
+
+  it('flags deNovoSynthesisReady when organic pool and protocells saturate in inhabited era', () => {
+    engine.setStage('inhabited')
+    // Saturate chemical pool
+    engine.setMonomerConcentration(0.9)
+    engine.setPolymerComplexity(0.85)
+    engine.setProtocellStability(0.85)
+    engine.setOrganicPoolVolume(0.92)
+
+    // Catalyst pulses to saturate organic pool
+    engine.catalyzeVent()
+    engine.catalyzeSpark()
+
+    const state = engine.step(1, temperatePlanet, undefined, 300, 5)
+    expect(state.deNovoSynthesisReady).toBe(true)
+
+    // Consume de novo synthesis
+    engine.consumeDeNovoBiogenesis()
+    expect(engine.getDeNovoSynthesisReady()).toBe(false)
+  })
+
   it('accumulates secondary prebiotic complexity when extinct in viable environment', () => {
     engine.setStage('extinct')
     engine.setOrganicComplexity(0.05)
@@ -109,5 +175,36 @@ describe('PrebioticEngine', () => {
     expect(state.organicComplexity).toBeLessThan(0.5)
     expect(state.statusDescription).toContain('Hostile environment')
   })
-})
 
+  it('classifies the three grand evolutionary macro-eras and planetary protocell architecture', () => {
+    // 1. Initial Chemical Evolution era
+    let state = engine.step(1, temperatePlanet)
+    expect(state.macroEra).toBe('chemical_evolution')
+    expect(state.macroEraLabel).toContain('Kỷ I: Tiến Hóa Hóa Học')
+    expect(state.protocellForm).toBe('lipid_coacervate')
+
+    // 2. Prebiological Evolution era (protocells maturing)
+    engine.catalyzeSpark()
+    engine.catalyzeVent()
+    state = engine.step(2, temperatePlanet)
+    expect(state.macroEra).toBe('prebiological_evolution')
+    expect(state.macroEraLabel).toContain('Kỷ II: Tiến Hóa Tiền Sinh Học')
+    expect(state.protocellComplexity).toBeGreaterThan(0.2)
+    expect(state.protoMetabolismRate).toBeGreaterThan(0.2)
+
+    // 3. Biological Evolution era (inhabited world)
+    engine.setStage('inhabited')
+    state = engine.step(3, temperatePlanet, undefined, 200, 3)
+    expect(state.macroEra).toBe('biological_evolution')
+    expect(state.macroEraLabel).toContain('Kỷ III: Tiến Hóa Sinh Học')
+
+    // 4. Exotic Protocell Form on Frozen sub-zero world
+    const cryoPlanet: PlanetConfig = {
+      ...temperatePlanet,
+      surfaceTemperatureCelsius: -50,
+    }
+    const cryoState = engine.step(1, cryoPlanet)
+    expect(cryoState.protocellForm).toBe('azotosome_cryo')
+    expect(cryoState.protocellFormLabel).toContain('Azotosome')
+  })
+})

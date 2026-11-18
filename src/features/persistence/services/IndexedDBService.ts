@@ -158,6 +158,32 @@ export class IndexedDBService {
   }
 
   /**
+   * Clears all stored world saves from IndexedDB and memory fallback.
+   */
+  static async clearAllSaves(): Promise<void> {
+    this.memoryFallback.clear()
+
+    if (!this.isIndexedDBAvailable()) {
+      return
+    }
+
+    try {
+      const db = await this.openDatabase()
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite')
+        const store = tx.objectStore(STORE_NAME)
+        const req = store.clear()
+
+        req.onsuccess = () => resolve()
+        req.onerror = () => reject(req.error ?? new Error('Failed to clear all saves'))
+        tx.oncomplete = () => db.close()
+      })
+    } catch {
+      // Ignored if failed
+    }
+  }
+
+  /**
    * Resets memory fallback for testing.
    */
   static resetMemoryFallback(): void {

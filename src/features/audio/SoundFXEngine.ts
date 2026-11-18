@@ -262,6 +262,40 @@ class SoundFXEngineImpl {
   }
 
   /**
+   * Harmonious biological discovery chime when a new species emerges.
+   */
+  public playSpeciation(): void {
+    if (this.isMuted) return
+    const ctx = this.initContext()
+    if (!ctx) return
+
+    try {
+      const now = ctx.currentTime
+      const notes = [739.99, 932.33, 1108.73, 1479.98]
+      notes.forEach((freq, idx) => {
+        const noteStart = now + idx * 0.08
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+
+        osc.type = 'sine'
+        osc.frequency.setValueAtTime(freq, noteStart)
+
+        gain.gain.setValueAtTime(0.001, noteStart)
+        gain.gain.exponentialRampToValueAtTime(this.masterVolume * 0.2, noteStart + 0.02)
+        gain.gain.exponentialRampToValueAtTime(0.001, noteStart + 0.3)
+
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+
+        osc.start(noteStart)
+        osc.stop(noteStart + 0.35)
+      })
+    } catch {
+      // Audio error no-op
+    }
+  }
+
+  /**
    * Starts ambient cosmic sub-bass drone.
    */
   public startAmbience(): void {

@@ -13,6 +13,8 @@ import { PrebioticEngine, DEFAULT_PREBIOTIC_STATE } from '../abiogenesis/Prebiot
 import type { PrebioticState } from '../abiogenesis/types.js'
 import { Organism } from './Organism.js'
 import { Species } from './Species.js'
+import type { SpeciationEvent } from '../taxonomy/types.js'
+import { TaxonomyEngine } from '../taxonomy/TaxonomyEngine.js'
 import type {
   SerializedSpecies,
   SerializedOrganism,
@@ -45,12 +47,23 @@ export class PopulationManager {
   private nextOrganismId = 1
   private nextSpeciesId = 1
   private currentGeneration = 0
+  private planetConfig: PlanetConfig | null = null
+  private pendingSpeciationEvents: SpeciationEvent[] = []
+
+  private recordSpeciationEvent(event: SpeciationEvent): void {
+    this.pendingSpeciationEvents.push(event)
+    if (this.pendingSpeciationEvents.length > 25) {
+      this.pendingSpeciationEvents.shift()
+    }
+  }
 
   /**
    * Initializes a freshly created planet into its prebiotic chemical era.
    * Generates the biome grid and assesses primordial chemical soup without forcing organisms.
    */
   initPlanet(planetConfig: PlanetConfig): void {
+    this.planetConfig = planetConfig
+    this.pendingSpeciationEvents = []
     this.organisms = []
     this.speciesMap.clear()
     this.nextOrganismId = 1
@@ -92,14 +105,44 @@ export class PopulationManager {
       chemistry.archetype
     )
 
+    const foundingTraits = TaxonomyEngine.evaluateTraits(
+      primordialGenotype,
+      1,
+      planetConfig
+    )
+    const foundingName = TaxonomyEngine.generateSpeciesDisplayName(
+      foundingTraits.tier,
+      foundingTraits.sapientArchetype,
+      foundingTraits.domain,
+      foundingTraits.trophicRole,
+      1,
+      foundingTraits.planetaryLineage
+    )
+
     const foundingSpecies = new Species(
       `sp_${this.nextSpeciesId++}`,
-      chemistry.archetype,
+      foundingName,
       primordialGenotype,
       0,
-      0
+      0,
+      undefined,
+      planetConfig
     )
     this.speciesMap.set(foundingSpecies.id, foundingSpecies)
+
+    this.recordSpeciationEvent({
+      id: `spec_bio_${foundingSpecies.id}_${Date.now()}`,
+      speciesId: foundingSpecies.id,
+      speciesName: foundingSpecies.name,
+      scientificName: foundingSpecies.traits.scientificName,
+      tier: foundingSpecies.traits.tier,
+      tierLabel: foundingSpecies.traits.tierLabel,
+      color: foundingSpecies.color,
+      emergenceRotation: 0,
+      traits: foundingSpecies.traits,
+      eventType: 'biogenesis',
+      description: `Loài khởi nguồn ${foundingSpecies.name} (${foundingSpecies.traits.domainLabel} - ${foundingSpecies.traits.trophicRoleLabel}) xuất hiện từ hóa hợp chất nguyên sơ!`,
+    })
 
     // 2. Identify the single best focal biogenesis cradle on the planet
     let bestCradleCell = this.biomeGrid[0]!
@@ -139,15 +182,134 @@ export class PopulationManager {
   }
 
   /**
-   * Player-invoked spark of life: forces biogenesis if primordial soup is viable.
+   * Player-invoked spark of life: forces biogenesis if primordial soup is viable,
+   * or triggers de novo microbial synthesis if biosphere is already inhabited.
    */
   sparkBiogenesis(planetConfig: PlanetConfig, rng: SeededRNG): boolean {
     const chemistry = this.prebioticEngine.evaluateChemistry(planetConfig)
+    if (this.prebioticEngine.getStage() === 'inhabited') {
+      this.triggerDeNovoBiogenesis(planetConfig, rng, 25, this.currentGeneration)
+      return true
+    }
     if (chemistry.chemicalFertility > 0.15 || this.prebioticEngine.getStage() === 'extinct') {
       this.triggerBiogenesis(planetConfig, rng, 40)
       return true
     }
     return false
+  }
+
+  /**
+   * Applies an interactive chemical catalyst (lightning spark or hydrothermal vent).
+   */
+  triggerChemicalCatalyst(catalystType: 'spark' | 'vent'): void {
+    if (catalystType === 'spark') {
+      this.prebioticEngine.catalyzeSpark()
+    } else if (catalystType === 'vent') {
+      this.prebioticEngine.catalyzeVent()
+    }
+  }
+
+  /**
+   * Spawns a brand new, independent pioneer species directly from prebiotic chemistry
+   * while an existing biosphere is actively inhabited.
+   */
+  triggerDeNovoBiogenesis(
+    planetConfig: PlanetConfig,
+    rng: SeededRNG,
+    count = 25,
+    rotation = 0
+  ): Species | null {
+    const chemistry = this.prebioticEngine.evaluateChemistry(planetConfig)
+    const primordialGenotype = this.prebioticEngine.generatePrimordialGenotype(
+      planetConfig,
+      chemistry.archetype
+    )
+
+    // Apply chemical mutation to diversify from previous ancestral strains
+    const mutatedGenotype = MutationEngine.mutateGenotype(
+      primordialGenotype,
+      {
+        baseMutationRate: 0.15,
+        mutationRateMultiplier: 1.5,
+        radiationLevel: 'moderate',
+      },
+      rng
+    )
+    const newSpeciesId = `sp_${this.nextSpeciesId++}`
+    const branchIndex = this.speciesMap.size + 1
+
+    const traits = TaxonomyEngine.evaluateTraits(
+      mutatedGenotype,
+      1,
+      this.planetConfig ?? planetConfig
+    )
+    const speciesName = TaxonomyEngine.generateSpeciesDisplayName(
+      traits.tier,
+      traits.sapientArchetype,
+      traits.domain,
+      traits.trophicRole,
+      branchIndex,
+      traits.planetaryLineage
+    )
+
+    const newSpecies = new Species(
+      newSpeciesId,
+      speciesName,
+      mutatedGenotype,
+      rotation,
+      this.speciesMap.size,
+      undefined,
+      this.planetConfig ?? planetConfig
+    )
+    newSpecies.generation = 1
+    newSpecies.updateTraits(this.planetConfig ?? planetConfig)
+    this.speciesMap.set(newSpeciesId, newSpecies)
+
+    // Consume de novo saturation
+    this.prebioticEngine.consumeDeNovoBiogenesis()
+
+    // Find a cradle cell (ocean, beach, or hydrothermal lowland)
+    let bestCell = this.biomeGrid[0]!
+    let bestScore = -1
+    for (const cell of this.biomeGrid) {
+      const isWater =
+        cell.biome === 'deep_ocean' || cell.biome === 'shallow_ocean' || cell.biome === 'beach'
+      const score = cell.carryingCapacity * (isWater ? 2.0 : 1.0)
+      if (score > bestScore) {
+        bestScore = score
+        bestCell = cell
+      }
+    }
+
+    for (let i = 0; i < count; i++) {
+      const org = new Organism(
+        `org_${this.nextOrganismId++}`,
+        newSpecies.id,
+        mutatedGenotype,
+        1,
+        7.0,
+        1,
+        bestCell.id
+      )
+      this.organisms.push(org)
+    }
+
+    this.recordSpeciationEvent({
+      id: `spec_denovo_${newSpecies.id}_${rotation}_${Date.now()}`,
+      speciesId: newSpecies.id,
+      speciesName: newSpecies.name,
+      scientificName: newSpecies.traits.scientificName,
+      tier: newSpecies.traits.tier,
+      tierLabel: newSpecies.traits.tierLabel,
+      color: newSpecies.color,
+      emergenceRotation: rotation,
+      traits: newSpecies.traits,
+      eventType: 'de_novo_chemical_synthesis',
+      description: `Khởi sinh hóa học song song: Dòng vi sinh mới ${newSpecies.name} (${newSpecies.traits.domainLabel} • ${newSpecies.traits.trophicRoleLabel}) tự sinh độc lập từ hồ hữu cơ nguyên thủy!`,
+    })
+
+    this.updateBiomeGridDensities()
+    return newSpecies
   }
 
   /**
@@ -183,9 +345,17 @@ export class PopulationManager {
     speciesSummaries: SpeciesSummary[]
     biomeCells: BiomeCellSummary[]
     prebioticState: PrebioticState
+    speciationEvents: SpeciationEvent[]
   } {
+    const planetChanged =
+      !this.planetConfig ||
+      this.planetConfig.surfaceTemperatureCelsius !== planetConfig.surfaceTemperatureCelsius ||
+      this.planetConfig.oceanLevel !== planetConfig.oceanLevel
+    this.planetConfig = planetConfig
+
     if (
       this.biomeGrid.length === 0 ||
+      planetChanged ||
       perturbations.temperatureDeltaCelsius !== 0 ||
       perturbations.oceanLevelDelta !== 0
     ) {
@@ -200,11 +370,22 @@ export class PopulationManager {
       this.cellAdjacency = BiomeGridGenerator.buildAdjacencyMap(this.biomeGrid, 5)
     }
 
-    // Advance prebiotic chemical evolution
+    // Calculate current living biomass & active species count for continuous biotic feedback
+    let totalBiomass = 0
+    for (const org of this.organisms) {
+      totalBiomass += org.cohortWeight
+    }
+    const activeSpeciesCount = Array.from(this.speciesMap.values()).filter(
+      (s) => !s.isExtinct
+    ).length
+
+    // Advance continuous chemical evolution in parallel
     let prebioticState = this.prebioticEngine.step(
       rotation,
       planetConfig,
-      perturbations
+      perturbations,
+      totalBiomass,
+      activeSpeciesCount
     )
 
     // Check Prebiotic Era transitions
@@ -215,7 +396,9 @@ export class PopulationManager {
         prebioticState = this.prebioticEngine.step(
           rotation,
           planetConfig,
-          perturbations
+          perturbations,
+          40,
+          1
         )
       } else {
         return this.generateSummary(prebioticState)
@@ -228,9 +411,28 @@ export class PopulationManager {
         const extinctState = this.prebioticEngine.step(
           rotation,
           planetConfig,
-          perturbations
+          perturbations,
+          0,
+          0
         )
         return this.generateSummary(extinctState)
+      }
+
+      // Spontaneous De Novo Microbial Genesis from saturated parallel chemistry
+      if (
+        this.prebioticEngine.getDeNovoSynthesisReady() &&
+        this.organisms.length > 0 &&
+        this.speciesMap.size < 12 &&
+        rng.next() < 0.2
+      ) {
+        this.triggerDeNovoBiogenesis(planetConfig, rng, 20, rotation)
+        prebioticState = this.prebioticEngine.step(
+          rotation,
+          planetConfig,
+          perturbations,
+          totalBiomass + 20,
+          activeSpeciesCount + 1
+        )
       }
     } else if (this.prebioticEngine.getStage() === 'extinct') {
       if (this.organisms.length === 0) {
@@ -241,7 +443,9 @@ export class PopulationManager {
           prebioticState = this.prebioticEngine.step(
             rotation,
             planetConfig,
-            perturbations
+            perturbations,
+            40,
+            1
           )
         } else {
           return this.generateSummary(prebioticState)
@@ -256,9 +460,93 @@ export class PopulationManager {
     const cellCount = this.biomeGrid.length
     const survivors: Organism[] = []
 
+    // Pre-calculate local trophic biomass per cell for Food Chain interactions
+    const cellTrophicBiomass = new Map<
+      number,
+      { producer: number; herbivore: number; prey: number; carnivore: number }
+    >()
+
+    let globalProducers = 0
+    let globalHerbivores = 0
+    let globalCarnivores = 0
+    let globalPrey = 0
+    let globalLowerTierBiomass = 0
+    let globalMicrobeBiomass = 0
+    const microbeSpeciesSet = new Set<string>()
+    let globalFloraBiomass = 0
+
+    for (const org of this.organisms) {
+      const sp = this.speciesMap.get(org.speciesId)
+      const role = sp?.traits.trophicRole ?? 'producer'
+      const tier = sp?.traits.tier ?? 'prokaryote'
+      const domain = sp?.traits.domain ?? 'microbe'
+
+      if (role === 'producer') {
+        globalProducers += org.cohortWeight
+      } else if (role === 'herbivore') {
+        globalHerbivores += org.cohortWeight
+        globalPrey += org.cohortWeight
+      } else if (role === 'omnivore') {
+        globalPrey += org.cohortWeight
+      } else if (role === 'carnivore') {
+        globalCarnivores += org.cohortWeight
+      }
+
+      if (
+        tier === 'prokaryote' ||
+        tier === 'eukaryote' ||
+        tier === 'simple_multicellular' ||
+        tier === 'differentiated_tissue' ||
+        tier === 'primitive_animal' ||
+        tier === 'unicellular' ||
+        tier === 'complex_multicellular'
+      ) {
+        globalLowerTierBiomass += org.cohortWeight
+      }
+
+      if (
+        tier === 'prokaryote' ||
+        tier === 'eukaryote' ||
+        tier === 'simple_multicellular' ||
+        tier === 'unicellular' ||
+        domain === 'microbe'
+      ) {
+        globalMicrobeBiomass += org.cohortWeight
+        microbeSpeciesSet.add(org.speciesId)
+      }
+      if (domain === 'flora') {
+        globalFloraBiomass += org.cohortWeight
+      }
+
+      const entry = cellTrophicBiomass.get(org.cellId) ?? {
+        producer: 0,
+        herbivore: 0,
+        prey: 0,
+        carnivore: 0,
+      }
+      if (role === 'producer') {
+        entry.producer += org.cohortWeight
+      } else if (role === 'herbivore') {
+        entry.herbivore += org.cohortWeight
+        entry.prey += org.cohortWeight
+      } else if (role === 'omnivore') {
+        entry.prey += org.cohortWeight
+      } else if (role === 'carnivore') {
+        entry.carnivore += org.cohortWeight
+      }
+      cellTrophicBiomass.set(org.cellId, entry)
+    }
+
+    const globalMicrobeDiversity = microbeSpeciesSet.size
+
     // 1. Natural Selection, Metabolism, Disaster Mortality in Local Biomes
     for (const organism of this.organisms) {
       organism.ageRotations++
+
+      const sp = this.speciesMap.get(organism.speciesId)
+      const role = sp?.traits.trophicRole ?? 'producer'
+      const tier = sp?.traits.tier ?? 'unicellular'
+      const domain = sp?.traits.domain ?? 'microbe'
 
       // Instant shockwave / disaster pulse (mitigated by structural armor)
       if (perturbations.instantMortalityRate > 0) {
@@ -279,8 +567,18 @@ export class PopulationManager {
         }
       }
 
-      // Basal metabolic consumption
-      organism.energy -= organism.phenotype.metabolicRate
+      // Basal metabolic consumption: lower tiers have lower basal metabolic requirements
+      const metabolicFactor =
+        tier === 'prokaryote' || tier === 'unicellular'
+          ? 0.45
+          : tier === 'eukaryote'
+          ? 0.55
+          : tier === 'simple_multicellular'
+          ? 0.70
+          : tier === 'differentiated_tissue'
+          ? 0.85
+          : 1.0
+      organism.energy -= organism.phenotype.metabolicRate * metabolicFactor
       if (organism.energy <= 0) {
         continue // Starvation
       }
@@ -313,15 +611,124 @@ export class PopulationManager {
       // Evaluate fitness against local biome climate
       organism.fitness = SelectionEngine.evaluateFitness(organism.phenotype, env)
 
-      const survivalProb = SelectionEngine.calculateSurvivalProbability(
+      let survivalProb = SelectionEngine.calculateSurvivalProbability(
         organism.fitness,
         env.selectionPressure
       )
 
+      // Microorganisms have immense cellular resilience when within viable environmental tolerances
+      const isMicrobeTier =
+        tier === 'prokaryote' ||
+        tier === 'eukaryote' ||
+        tier === 'simple_multicellular' ||
+        tier === 'unicellular' ||
+        domain === 'microbe'
+
+      if (isMicrobeTier && organism.fitness >= 0.2) {
+        survivalProb = Math.min(0.99, survivalProb * 1.2)
+      }
+
+      // Calculate food chain energy intake based on trophic role
+      const trophicData = cellTrophicBiomass.get(organism.cellId) ?? {
+        producer: 0,
+        herbivore: 0,
+        prey: 0,
+        carnivore: 0,
+      }
+
+      let trophicFoodMultiplier = 1.0
+      if (role === 'producer') {
+        trophicFoodMultiplier = 1.2 * env.resourceAvailability
+      } else if (role === 'herbivore') {
+        if (trophicData.producer <= 0 && globalProducers <= 0) {
+          // Total collapse of producer food chain: severe starvation and mortality
+          trophicFoodMultiplier = 0.05
+          survivalProb *= 0.15
+          organism.energy = Math.max(0, organism.energy - 2.0)
+          organism.fitness = Math.max(0.01, organism.fitness * 0.3)
+        } else if (trophicData.producer <= 0) {
+          trophicFoodMultiplier = 0.3
+          survivalProb *= 0.5
+        } else {
+          const ratio = trophicData.producer / Math.max(15, trophicData.herbivore)
+          trophicFoodMultiplier = Math.min(1.5, Math.max(0.4, 0.4 + ratio * 0.8))
+          if (ratio < 0.3) survivalProb *= (0.5 + ratio * 1.5)
+        }
+      } else if (role === 'carnivore') {
+        if (trophicData.prey <= 0 && globalPrey <= 0) {
+          // Total collapse of prey: carnivores starve
+          trophicFoodMultiplier = 0.05
+          survivalProb *= 0.1
+          organism.energy = Math.max(0, organism.energy - 3.0)
+          organism.fitness = Math.max(0.01, organism.fitness * 0.2)
+        } else if (trophicData.prey <= 0) {
+          trophicFoodMultiplier = 0.25
+          survivalProb *= 0.45
+        } else {
+          const ratio = trophicData.prey / Math.max(5, trophicData.carnivore)
+          trophicFoodMultiplier = Math.min(1.6, Math.max(0.3, 0.3 + (ratio / (1.0 + ratio)) * 1.3))
+          if (ratio < 0.3) survivalProb *= (0.4 + ratio * 1.5)
+        }
+      } else if (role === 'omnivore') {
+        if (globalProducers <= 0 && globalPrey <= 0) {
+          trophicFoodMultiplier = 0.1
+          survivalProb *= 0.15
+        } else {
+          const plantRatio = trophicData.producer > 0 ? trophicData.producer / 20.0 : 0.2
+          const preyRatio = trophicData.prey > 0 ? trophicData.prey / 10.0 : 0.2
+          trophicFoodMultiplier = Math.min(1.3, Math.max(0.3, 0.4 + plantRatio * 0.4 + preyRatio * 0.4))
+          if (trophicData.producer <= 0 && trophicData.prey <= 0) survivalProb *= 0.4
+        }
+      }
+
+      // Bilaterians, Advanced & Sapient species depend on an underlying lower-tier ecological pyramid
+      if (
+        (tier === 'complex_bilaterian' ||
+          tier === 'complex_multicellular' ||
+          tier === 'advanced' ||
+          tier === 'sapient') &&
+        globalLowerTierBiomass <= 5
+      ) {
+        survivalProb *= 0.25
+        organism.fitness = Math.max(0.01, organism.fitness * 0.4)
+      }
+
+      // Plants adapt and flourish based on the underlying microbial genome & biodiversity
+      if (domain === 'flora') {
+        if (globalMicrobeDiversity >= 1 && globalMicrobeBiomass >= 20) {
+          // Rich microbial bedrock: bio-weathering, rhizobial/mycorrhizal symbiosis, and soil nutrient cycling
+          const diversityBonus = Math.min(0.5, globalMicrobeDiversity * 0.1)
+          const biomassBonus = Math.min(0.5, (globalMicrobeBiomass / 300.0) * 0.5)
+          trophicFoodMultiplier *= (1.0 + diversityBonus + biomassBonus)
+          survivalProb = Math.min(0.98, survivalProb * (1.0 + diversityBonus * 0.3))
+          organism.fitness = Math.min(1.0, organism.fitness * (1.0 + diversityBonus * 0.2))
+        } else {
+          // Without microbial soil foundation and microbial gene inheritance, flora struggles on raw bedrock
+          trophicFoodMultiplier *= 0.35
+          survivalProb *= 0.4
+          organism.fitness = Math.max(0.01, organism.fitness * 0.5)
+        }
+      }
+
+      const fitnessNutrientFactor =
+        organism.fitness >= 0.2 ? 1.0 : Math.max(0.05, organism.fitness * 2.0)
+      const baseIntake =
+        tier === 'prokaryote' || tier === 'unicellular'
+          ? 2.2
+          : tier === 'eukaryote'
+          ? 2.1
+          : tier === 'simple_multicellular'
+          ? 2.0
+          : 1.8
+      const energyIntake =
+        baseIntake *
+        env.resourceAvailability *
+        trophicFoodMultiplier *
+        fitnessNutrientFactor *
+        (0.8 + 0.4 * organism.phenotype.mobility)
+
       if (organism.cohortWeight <= 1) {
         if (rng.next() < survivalProb) {
-          const energyIntake =
-            1.8 * env.resourceAvailability * (0.8 + 0.4 * organism.phenotype.mobility)
           organism.energy = Math.min(15.0, organism.energy + energyIntake)
 
           // Density-Dependent Geodesic Spatial Dispersal to contiguous neighbors
@@ -346,8 +753,6 @@ export class PopulationManager {
         )
         if (survivingWeight > 0) {
           organism.cohortWeight = survivingWeight
-          const energyIntake =
-            1.8 * env.resourceAvailability * (0.8 + 0.4 * organism.phenotype.mobility)
           organism.energy = Math.min(15.0, organism.energy + energyIntake)
 
           // Density-Dependent Geodesic Spatial Dispersal to contiguous neighbors
@@ -374,13 +779,6 @@ export class PopulationManager {
       planetConfig.environmentalConditions.radiationLevel,
       perturbations.radiationMultiplier
     )
-    const mutationConfig = {
-      baseMutationRate: 0.06,
-      mutationRateMultiplier:
-        planetConfig.environmentalConditions.mutationRateMultiplier *
-        perturbations.mutationRateMultiplier,
-      radiationLevel: effectiveRadiation,
-    }
 
     // Group fertile organisms by local colony (cellId)
     const colonyFertileMap = new Map<number, Organism[]>()
@@ -397,6 +795,31 @@ export class PopulationManager {
 
       for (let i = 0; i < localFertile.length; i += 2) {
         const parentA = localFertile[i]!
+        const spA = this.speciesMap.get(parentA.speciesId)
+        const roleA = spA?.traits.trophicRole ?? 'producer'
+        const tierA = spA?.traits.tier ?? 'prokaryote'
+        const domainA = spA?.traits.domain ?? 'microbe'
+
+        // Strict food chain & ecological bedrock compliance:
+        // - Severe physiological distress: organisms failing environmental viability cannot reproduce
+        // - Herbivores require producers, carnivores require prey
+        // - Bilaterians, Advanced & Sapient species require underlying lower-tier biomass
+        // - Plants strictly depend on foundational microbial biomass
+        if (parentA.fitness < 0.2) continue
+        if (roleA === 'herbivore' && globalProducers <= 0) continue
+        if (roleA === 'carnivore' && globalPrey <= 0) continue
+        if (
+          (tierA === 'complex_bilaterian' ||
+            tierA === 'complex_multicellular' ||
+            tierA === 'advanced' ||
+            tierA === 'sapient') &&
+          globalLowerTierBiomass <= 5
+        ) {
+          continue
+        }
+        if (tierA === 'primitive_animal' && globalLowerTierBiomass <= 3) continue
+        if (domainA === 'flora' && globalMicrobeBiomass <= 10) continue
+
         let parentB = localFertile[i + 1]
 
         // If odd, try mating with neighboring contiguous colony
@@ -412,21 +835,65 @@ export class PopulationManager {
 
         if (!parentB) {
           // Allee Effect: Isolated individual with no local or neighboring mates
-          // Requires high energy reserves (budding) or reproduction fails
-          if (parentA.energy < 7.0 || rng.next() > 0.5) {
+          // Microbes divide by binary fission / budding with lower energy requirement and higher success rate
+          const isMicrobe =
+            tierA === 'prokaryote' ||
+            tierA === 'eukaryote' ||
+            tierA === 'simple_multicellular' ||
+            tierA === 'unicellular' ||
+            domainA === 'microbe'
+          const isolationEnergyReq = isMicrobe ? 5.0 : 7.0
+          const isolationFailProb = isMicrobe ? 0.3 : 0.5
+          if (parentA.energy < isolationEnergyReq || rng.next() < isolationFailProb) {
             continue // Allee reproductive failure due to isolation
           }
           parentB = parentA
         }
 
-        // Energy cost of reproduction
-        parentA.energy -= 2.5
-        if (parentB !== parentA) parentB.energy -= 2.5
+        // Energy cost of reproduction (microbes divide efficiently)
+        const reproCost =
+          tierA === 'prokaryote' || tierA === 'unicellular'
+            ? 1.8
+            : tierA === 'eukaryote'
+            ? 1.9
+            : tierA === 'simple_multicellular'
+            ? 2.1
+            : 2.5
+        parentA.energy -= reproCost
+        if (parentB !== parentA) parentB.energy -= reproCost
 
-        const offspringWeight = Math.max(
+        let offspringWeight = Math.max(
           1,
           Math.floor((parentA.cohortWeight + parentB.cohortWeight) / 2)
         )
+        // Microorganisms proliferate exponentially at massive scale
+        if (tierA === 'prokaryote' || tierA === 'unicellular') {
+          offspringWeight = Math.max(2, Math.floor(offspringWeight * 1.6))
+        } else if (tierA === 'eukaryote') {
+          offspringWeight = Math.max(2, Math.floor(offspringWeight * 1.45))
+        } else if (tierA === 'simple_multicellular') {
+          offspringWeight = Math.max(1, Math.floor(offspringWeight * 1.3))
+        } else if (domainA === 'flora' && globalMicrobeDiversity >= 2) {
+          // Flora thriving on high microbial biodiversity expands robustly
+          offspringWeight = Math.max(1, Math.floor(offspringWeight * 1.25))
+        }
+
+        // Mutation config per evolutionary tier
+        const baseMutationRate =
+          tierA === 'prokaryote' || tierA === 'unicellular'
+            ? 0.12
+            : tierA === 'eukaryote'
+            ? 0.10
+            : tierA === 'simple_multicellular'
+            ? 0.08
+            : 0.06
+        const localMutationConfig = {
+          baseMutationRate,
+          mutationRateMultiplier:
+            planetConfig.environmentalConditions.mutationRateMultiplier *
+            perturbations.mutationRateMultiplier,
+          radiationLevel: effectiveRadiation,
+        }
 
         // Recombination
         const recombinant = RecombinationEngine.sexualCross(
@@ -438,9 +905,12 @@ export class PopulationManager {
         // Mutation pass
         const mutated = MutationEngine.mutateGenotype(
           recombinant,
-          mutationConfig,
+          localMutationConfig,
           rng
         )
+
+        const childGen = Math.max(parentA.generation, parentB.generation) + 1
+        this.currentGeneration = Math.max(this.currentGeneration, childGen)
 
         let targetSpeciesId = parentA.speciesId
         const parentSpecies = this.speciesMap.get(parentA.speciesId)
@@ -452,22 +922,78 @@ export class PopulationManager {
             parentSpecies.foundingGenotype
           )
 
-          if (dist > SPECIATION_DISTANCE_THRESHOLD) {
+          // Microorganisms diversify rapidly with a lower speciation distance threshold
+          const speciationThreshold =
+            tierA === 'prokaryote' ||
+            tierA === 'unicellular' ||
+            tierA === 'eukaryote' ||
+            tierA === 'simple_multicellular'
+              ? 0.12
+              : SPECIATION_DISTANCE_THRESHOLD
+
+          if (dist > speciationThreshold) {
             const newSpeciesId = `sp_${this.nextSpeciesId++}`
+            const branchIndex = this.speciesMap.size + 1
+            const traits = TaxonomyEngine.evaluateTraits(
+              mutated,
+              childGen,
+              this.planetConfig ?? planetConfig
+            )
+            const branchName = TaxonomyEngine.generateSpeciesDisplayName(
+              traits.tier,
+              traits.sapientArchetype,
+              traits.domain,
+              traits.trophicRole,
+              branchIndex,
+              traits.planetaryLineage
+            )
+
             const newSpecies = new Species(
               newSpeciesId,
-              `Branch ${parentSpecies.name.split(' ')[0]} ${String.fromCharCode(64 + (this.nextSpeciesId % 26))}`,
+              branchName,
               mutated,
               rotation,
-              this.speciesMap.size
+              this.speciesMap.size,
+              undefined,
+              this.planetConfig ?? planetConfig
             )
+            newSpecies.generation = childGen
+            newSpecies.updateTraits(this.planetConfig ?? planetConfig)
             this.speciesMap.set(newSpeciesId, newSpecies)
             targetSpeciesId = newSpeciesId
+
+            let speciationDesc = `Phân nhánh tiến hóa thích nghi mới: ${newSpecies.name} (${newSpecies.traits.domainLabel} • ${newSpecies.traits.trophicRoleLabel}) xuất hiện từ đột biến gen!`
+            if (traits.tier === 'prokaryote') {
+              speciationDesc = `Chủng vi sinh vật nhân sơ mới: ${newSpecies.name} (Tế bào nhân sơ Prokaryote chưa màng nhân) xuất hiện và sinh sôi mạnh mẽ!`
+            } else if (traits.tier === 'eukaryote') {
+              speciationDesc = `Sự hình thành tế bào nhân thực mới: ${newSpecies.name} (Eukaryote nội cộng sinh bào quan ti thể/lục lạp) phát triển với cấu trúc phức tạp!`
+            } else if (traits.tier === 'simple_multicellular') {
+              speciationDesc = `Bước chuyển sinh vật đa bào đơn giản: ${newSpecies.name} (Tập đoàn tế bào / Colonial organism) hình thành liên kết hợp tác!`
+            } else if (traits.tier === 'differentiated_tissue') {
+              speciationDesc = `Phân hóa tế bào và mô chuyên biệt: ${newSpecies.name} (Biểu mô, tế bào vận động & sinh sản sơ khai) phân tầng chức năng!`
+            } else if (traits.tier === 'primitive_animal') {
+              speciationDesc = `Kỷ nguyên Động vật đầu tiên xuất hiện: ${newSpecies.name} (Động vật đa bào nguyên thủy - Bọt biển & Ruột khoang đối xứng tỏa tròn)!`
+            } else if (traits.tier === 'complex_bilaterian') {
+              speciationDesc = `Đột phá đối xứng hai bên: ${newSpecies.name} (Động vật đối xứng hai bên Bilateria) hình thành hạch não, hệ cơ và khoang tiêu hóa chuyên biệt!`
+            } else if (traits.domain === 'flora') {
+              speciationDesc = `Thực vật mới thích nghi từ bộ gen vi sinh: ${newSpecies.name} (${newSpecies.traits.tierLabel} • ${newSpecies.traits.trophicRoleLabel}) phát triển nhờ bệ phóng đa dạng sinh học vi sinh!`
+            }
+
+            this.recordSpeciationEvent({
+              id: `spec_branch_${newSpecies.id}_${rotation}`,
+              speciesId: newSpecies.id,
+              speciesName: newSpecies.name,
+              scientificName: newSpecies.traits.scientificName,
+              tier: newSpecies.traits.tier,
+              tierLabel: newSpecies.traits.tierLabel,
+              color: newSpecies.color,
+              emergenceRotation: rotation,
+              traits: newSpecies.traits,
+              eventType: 'branching',
+              description: speciationDesc,
+            })
           }
         }
-
-        const childGen = Math.max(parentA.generation, parentB.generation) + 1
-        this.currentGeneration = Math.max(this.currentGeneration, childGen)
 
         // Offspring placement: born in parent's colony, or spills into contiguous neighbor if full
         let birthCellId = parentA.cellId
@@ -495,13 +1021,48 @@ export class PopulationManager {
       this.compressCohorts()
     }
 
-    // 4. Extinction Detection
+    // 4. Extinction & Tier Ascension Detection
     for (const species of this.speciesMap.values()) {
       if (!species.isExtinct) {
         const remaining = this.organisms.filter((o) => o.speciesId === species.id)
         if (remaining.length === 0) {
           species.isExtinct = true
           species.extinctionRotation = rotation
+        } else {
+          // Check for evolutionary tier ascension as generations accumulate
+          const ascended = species.updateTraits(this.planetConfig ?? planetConfig)
+          if (ascended) {
+            let ascendDesc = `Loài ${species.name} đã đột phá nấc thang tiến hóa, vươn lên cấp bậc: ${species.traits.tierLabel}!`
+            if (species.traits.tier === 'eukaryote') {
+              ascendDesc = `Bước ngoặt Nội cộng sinh: ${species.name} tích hợp bào quan ti thể/lục lạp, tiến hóa thành Tế bào nhân thực (Eukaryotes)!`
+            } else if (species.traits.tier === 'simple_multicellular') {
+              ascendDesc = `Hợp tác tế bào: ${species.name} chuyển hóa thành Sinh vật đa bào đơn giản dạng tập đoàn (Colonial)!`
+            } else if (species.traits.tier === 'differentiated_tissue') {
+              ascendDesc = `Chuyên môn hóa chức năng: ${species.name} phân hóa thành các mô và cơ quan sơ khai (biểu mô, vận động, sinh sản)!`
+            } else if (species.traits.tier === 'primitive_animal') {
+              ascendDesc = `Bình minh Động vật giới: ${species.name} tiến hóa thành Động vật đa bào nguyên thủy (Metazoa đối xứng tỏa tròn/bọt biển)!`
+            } else if (species.traits.tier === 'complex_bilaterian') {
+              ascendDesc = `Kỷ nguyên Đối xứng hai bên: ${species.name} phát triển đối xứng hai bên (Bilateria) với hệ thần kinh và khoang cơ thể chuyên biệt!`
+            } else if (species.traits.tier === 'advanced') {
+              ascendDesc = `Đột phá bậc cao: ${species.name} tiến hóa thành Sinh vật bậc cao phức tạp thích nghi vượt bậc!`
+            } else if (species.traits.tier === 'sapient') {
+              ascendDesc = `Khai mở trí năng: ${species.name} thăng hoa thành Sinh vật có Trí tuệ và ý thức!`
+            }
+
+            this.recordSpeciationEvent({
+              id: `spec_ascend_${species.id}_${rotation}_${species.traits.tier}`,
+              speciesId: species.id,
+              speciesName: species.name,
+              scientificName: species.traits.scientificName,
+              tier: species.traits.tier,
+              tierLabel: species.traits.tierLabel,
+              color: species.color,
+              emergenceRotation: rotation,
+              traits: species.traits,
+              eventType: 'ascension',
+              description: ascendDesc,
+            })
+          }
         }
       }
     }
@@ -701,6 +1262,7 @@ export class PopulationManager {
       sp.isExtinct = s.isExtinct
       sp.extinctionRotation = s.extinctionRotation
       sp.generation = s.generation
+      sp.updateTraits(planetConfig)
       this.speciesMap.set(s.id, sp)
     }
 
@@ -739,6 +1301,7 @@ export class PopulationManager {
     speciesSummaries: SpeciesSummary[]
     biomeCells: BiomeCellSummary[]
     prebioticState: PrebioticState
+    speciationEvents: SpeciationEvent[]
   } {
     let totalPop = 0
     let weightedFitness = 0
@@ -755,6 +1318,16 @@ export class PopulationManager {
     let extinctSpeciesCount = 0
     const speciesSummaries: SpeciesSummary[] = []
 
+    // Build Trophic Food Web Links
+    const activeSpecies = Array.from(this.speciesMap.values()).filter((s) => !s.isExtinct)
+    const producerSpecies = activeSpecies.filter((s) => s.traits.trophicRole === 'producer')
+    const herbivoreSpecies = activeSpecies.filter(
+      (s) => s.traits.trophicRole === 'herbivore' || s.traits.trophicRole === 'omnivore'
+    )
+    const carnivoreSpecies = activeSpecies.filter(
+      (s) => s.traits.trophicRole === 'carnivore' || s.traits.trophicRole === 'omnivore'
+    )
+
     for (const species of this.speciesMap.values()) {
       const living = this.organisms.filter((o) => o.speciesId === species.id)
       if (species.isExtinct) {
@@ -762,7 +1335,63 @@ export class PopulationManager {
       } else {
         activeSpeciesCount++
       }
-      speciesSummaries.push(species.toSummary(living))
+
+      const summary = species.toSummary(living)
+      const role = species.traits.trophicRole
+
+      let preyIds: string[] = []
+      let predatorIds: string[] = []
+      let foodChainSummary = 'Quang hợp và hóa năng'
+
+      if (role === 'herbivore') {
+        preyIds = producerSpecies.map((p) => p.id)
+        predatorIds = carnivoreSpecies.map((c) => c.id)
+        foodChainSummary =
+          producerSpecies.length > 0
+            ? `Ăn: ${producerSpecies.slice(0, 2).map((p) => p.name).join(', ')}`
+            : 'Thiếu thảm thực vật!'
+      } else if (role === 'carnivore') {
+        preyIds = herbivoreSpecies.map((h) => h.id)
+        predatorIds = []
+        foodChainSummary =
+          herbivoreSpecies.length > 0
+            ? `Săn: ${herbivoreSpecies.slice(0, 2).map((h) => h.name).join(', ')}`
+            : 'Thiếu con mồi!'
+      } else if (role === 'omnivore') {
+        preyIds = [
+          ...producerSpecies.map((p) => p.id),
+          ...herbivoreSpecies.filter((h) => h.id !== species.id).map((h) => h.id),
+        ]
+        predatorIds = carnivoreSpecies.filter((c) => c.id !== species.id).map((c) => c.id)
+        foodChainSummary = 'Tiêu thụ thực vật & con mồi'
+      } else if (role === 'producer') {
+        preyIds = []
+        predatorIds = herbivoreSpecies.map((h) => h.id)
+        foodChainSummary = 'Quang năng sao & khoáng chất'
+      } else {
+        preyIds = []
+        predatorIds = []
+        foodChainSummary = 'Phân giải xác sinh khối hữu cơ'
+      }
+
+      let hungerState: 'satiated' | 'hungry' | 'starving' = 'satiated'
+      if (living.length > 0) {
+        const totalEnergy = living.reduce((acc, o) => acc + o.energy * o.cohortWeight, 0)
+        const avgEnergy = totalEnergy / Math.max(1, summary.population)
+        if (avgEnergy < 3.0) {
+          hungerState = 'starving'
+        } else if (avgEnergy < 5.0) {
+          hungerState = 'hungry'
+        }
+      }
+
+      speciesSummaries.push({
+        ...summary,
+        preySpeciesIds: preyIds,
+        predatorSpeciesIds: predatorIds,
+        hungerState,
+        foodChainSummary,
+      })
     }
 
     const biomeCells: BiomeCellSummary[] = this.biomeGrid.map((c) => ({
@@ -774,6 +1403,9 @@ export class PopulationManager {
       residentSpeciesColor: c.residentSpeciesColor,
     }))
 
+    const eventsToEmit = [...this.pendingSpeciationEvents]
+    this.pendingSpeciationEvents = []
+
     return {
       totalPopulation: totalPop,
       activeSpeciesCount,
@@ -783,6 +1415,7 @@ export class PopulationManager {
       speciesSummaries,
       biomeCells,
       prebioticState,
+      speciationEvents: eventsToEmit,
     }
   }
 }

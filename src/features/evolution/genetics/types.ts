@@ -46,6 +46,13 @@ export interface Phenotype {
   readonly mobility: number // [0.0, 1.0]
 }
 
+import type {
+  EvolutionTier,
+  BiologicalTraits,
+  OrganismDomain,
+  TrophicRole,
+} from '../taxonomy/types.js'
+
 export interface SpeciesSummary {
   readonly id: string
   readonly name: string
@@ -59,5 +66,23 @@ export interface SpeciesSummary {
     readonly resilience: number
   }
   readonly isExtinct: boolean
+  readonly tier?: EvolutionTier
+  readonly tierLabel?: string
+  readonly tierRank?: number
+  readonly scientificName?: string
+  readonly biologicalTraits?: BiologicalTraits
+  readonly domain?: OrganismDomain
+  readonly domainLabel?: string
+  readonly domainIcon?: string
+  readonly trophicRole?: TrophicRole
+  readonly trophicRoleLabel?: string
+  readonly trophicLevel?: number
+  readonly preySpeciesIds?: readonly string[]
+  readonly predatorSpeciesIds?: readonly string[]
+  readonly hungerState?: 'satiated' | 'hungry' | 'starving'
+  readonly foodChainSummary?: string
+  readonly emergenceRotation?: number
+  readonly extinctionRotation?: number | null
+  readonly lifespanRotations?: number
 }
 

@@ -3,8 +3,11 @@ import * as THREE from "three";
 import { SoundFX } from "./features/audio/SoundFXEngine.js";
 import { DisasterControlHUD } from "./features/disasters/components/DisasterControlHUD.js";
 import { BiomeGridGenerator } from "./features/environment/climate/BiomeGridGenerator.js";
-import { BiogeochemicalHUD } from "./features/environment/components/BiogeochemicalHUD.js";
-import { EcosystemHUD } from "./features/evolution/components/EcosystemHUD.js";
+import { SpeciationAlertToast } from "./features/evolution/components/SpeciationAlertToast.js";
+import {
+  RightEvolutionDrawer,
+  type EvolutionTabType,
+} from "./features/evolution/components/RightEvolutionDrawer.js";
 import { GenesisModal } from "./features/genesis/components/GenesisModal.js";
 import { SaveManagerModal } from "./features/persistence/components/SaveManagerModal.js";
 import { useAutoSave } from "./features/persistence/hooks/useAutoSave.js";
@@ -12,9 +15,10 @@ import { AutoSaveService } from "./features/persistence/services/AutoSaveService
 import { Planet } from "./features/planet/components/Planet.js";
 import { PlanetInspectHUD } from "./features/planet/components/PlanetInspectHUD.js";
 import type { PlanetInspectData } from "./features/planet/components/PlanetSurface.js";
-import { DebugPanel } from "./features/simulation/components/DebugPanel.js";
+import { SimulationControlsCenterHUD } from "./features/simulation/components/SimulationControlsCenterHUD.js";
 import { KeyboardShortcutsModal } from "./features/simulation/components/KeyboardShortcutsModal.js";
 import { WelcomeOnboardingModal } from "./features/genesis/components/WelcomeOnboardingModal.js";
+import { ResetDataConfirmationModal } from "./features/persistence/components/ResetDataConfirmationModal.js";
 import { useSimulation } from "./features/simulation/hooks/useSimulation.js";
 import { SceneCanvas } from "./rendering/canvas/SceneCanvas.js";
 import { usePlanetStore } from "./stores/planet-store.js";
@@ -26,12 +30,14 @@ export default function App() {
     isReady,
     start,
     pause,
+    reset,
     setSpeed,
     syncPlanet,
     seedPopulation,
     triggerStress,
     triggerDisaster,
     sparkBiogenesis,
+    catalyzeChemistry,
     exportState,
     loadState,
   } = useSimulation();
@@ -47,7 +53,11 @@ export default function App() {
   );
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+  const [selectedSpeciesId, setSelectedSpeciesId] = useState<string | null>(null);
+  const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false);
+  const [activeRightTab, setActiveRightTab] = useState<EvolutionTabType>("ecosystem");
   const [isCinematic, setIsCinematic] = useState(false);
   const [isHudVisible, setIsHudVisible] = useState(true);
   const [isSoundMuted, setIsSoundMuted] = useState(() => SoundFX.getMuted());
@@ -132,6 +142,29 @@ export default function App() {
   const handleRandomizePlanet = () => {
     SoundFX.playClick();
     randomizePlanet();
+  };
+
+  const handleResetAllData = async () => {
+    SoundFX.playDisaster("volcanic_eruption", 0.5);
+    // 1. Wipe all persistent data (IndexedDB world saves, auto-save session, localStorage flags)
+    await AutoSaveService.wipeAllData();
+
+    // 2. Reset simulation worker & clocks
+    reset();
+
+    // 3. Reset planet state to default
+    const defaultPlanet = loadDefaultPlanet();
+    syncPlanet(defaultPlanet, true);
+
+    // 4. Close any active panels or modals
+    setIsResetModalOpen(false);
+    setIsSaveModalOpen(false);
+    setIsRightDrawerOpen(false);
+    setSelectedSpeciesId(null);
+    setInspectData(null);
+
+    // 5. Open Welcome Onboarding Modal so player can create their new planet!
+    setIsWelcomeModalOpen(true);
   };
 
   // Sync current planet configuration with the Simulation Web Worker
@@ -250,6 +283,16 @@ export default function App() {
         </div>
       )}
 
+      {/* Speciation Event Announcement Toast & Decisions (Center Top-Down) */}
+      <SpeciationAlertToast
+        events={snapshot.speciationEvents}
+        onSelectSpecies={(id) => {
+          setSelectedSpeciesId(id);
+          setActiveRightTab("species");
+          setIsRightDrawerOpen(true);
+        }}
+      />
+
       {/* Floating HUD toggle pill when HUDs are hidden (Cinematic mode) */}
       {!isHudVisible && (
         <button
@@ -266,21 +309,14 @@ export default function App() {
       {/* Main HUD Overlays (toggleable with 'H') */}
       {isHudVisible && (
         <>
-          {/* Planetary Disaster Arsenal & Alert Banner (Top-Center) */}
+          {/* Planetary Disaster Notifications, Status & Process (Left-Side) */}
           <DisasterControlHUD
             activeDisasters={snapshot.activeDisasters}
             perturbations={snapshot.perturbations}
             onTriggerDisaster={handleTriggerDisaster}
           />
 
-          {/* Biogeochemical & Atmospheric Matrix HUD (Left-Side) */}
-          <BiogeochemicalHUD
-            biogeochemical={snapshot.biogeochemical}
-            rotations={snapshot.rotations}
-            partialRotation={snapshot.partialRotation}
-          />
-
-          {/* Top Header & Navigation Bar */}
+          {/* Top Header & Navigation Bar (Top-Left) */}
           <div className="fixed top-4 left-4 z-10 font-mono">
             <h1 className="text-sm font-semibold tracking-wider text-white uppercase drop-shadow">
               Evolution Sandbox
@@ -300,6 +336,17 @@ export default function App() {
                 className="rounded bg-cyan-700/80 hover:bg-cyan-600 px-2.5 py-1 text-xs font-semibold text-white transition-all shadow-md backdrop-blur-sm"
               >
                 💾 Archives
+              </button>
+              <button
+                onClick={() => {
+                  SoundFX.playClick();
+                  setIsResetModalOpen(true);
+                }}
+                className="rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 px-2.5 py-1 text-xs font-semibold text-rose-300 transition-all shadow-md backdrop-blur-sm flex items-center gap-1"
+                title="Xóa toàn bộ dữ liệu và bắt đầu thế giới mới"
+              >
+                <span>🗑️</span>
+                <span>Chơi mới (Reset)</span>
               </button>
               <button
                 onClick={handleRandomizePlanet}
@@ -346,7 +393,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Planetary Inspection Readout HUD (Top-Right) */}
+          {/* Planetary Temperature, Climate & Inspection Readout HUD (Top-Right) */}
           <PlanetInspectHUD
             inspectData={inspectData}
             planetName={currentPlanet.name}
@@ -356,8 +403,19 @@ export default function App() {
             onOpenGenesis={handleOpenGenesis}
           />
 
-          {/* Biosphere Monitor & Evolution Controls (Bottom-Right) */}
-          <EcosystemHUD
+          {/* Unified Right-Side Tabbed Drawer (1/3 Screen Slide-In for Ecosystem, Species & Biogeochemistry) */}
+          <RightEvolutionDrawer
+            isOpen={isRightDrawerOpen}
+            activeTab={activeRightTab}
+            onClose={() => setIsRightDrawerOpen(false)}
+            onToggleTab={(tab) => {
+              if (isRightDrawerOpen && activeRightTab === tab) {
+                setIsRightDrawerOpen(false);
+              } else {
+                setActiveRightTab(tab);
+                setIsRightDrawerOpen(true);
+              }
+            }}
             totalPopulation={snapshot.totalPopulation}
             activeSpeciesCount={snapshot.activeSpeciesCount}
             extinctSpeciesCount={snapshot.extinctSpeciesCount}
@@ -375,10 +433,27 @@ export default function App() {
               triggerStress(0.8);
             }}
             onSparkBiogenesis={handleSparkBiogenesis}
+            onCatalyzeChemistry={(type) => {
+              SoundFX.playClick();
+              catalyzeChemistry(type);
+            }}
+            selectedSpeciesId={selectedSpeciesId}
+            onSelectSpecies={(id) => setSelectedSpeciesId(id)}
+            biogeochemical={snapshot.biogeochemical}
+            rotations={snapshot.rotations}
+            partialRotation={snapshot.partialRotation}
           />
 
-          {/* Simulation Engine Debug & Controls (Bottom-Left) */}
-          <DebugPanel />
+          {/* Unified Simulation Controls: Speed & Rotations (Bottom-Center) */}
+          <SimulationControlsCenterHUD
+            rotations={snapshot.rotations}
+            partialRotation={snapshot.partialRotation}
+            speed={snapshot.speed}
+            status={snapshot.status}
+            onStart={start}
+            onPause={pause}
+            onSetSpeed={setSpeed}
+          />
         </>
       )}
 
@@ -397,6 +472,14 @@ export default function App() {
           isRestoringSaveRef.current = true;
           loadPlanet(planetConfig);
         }}
+        onOpenResetModal={() => setIsResetModalOpen(true)}
+      />
+
+      {/* Wipe All Data & New Game Confirmation Modal */}
+      <ResetDataConfirmationModal
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
+        onConfirmReset={handleResetAllData}
       />
 
       {/* First-Time Welcome & Onboarding Modal */}

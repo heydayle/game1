@@ -24,6 +24,7 @@ import {
 import { DEFAULT_PERTURBATIONS } from '../../disasters/constants.js'
 import { DEFAULT_PREBIOTIC_STATE } from '../../evolution/abiogenesis/PrebioticEngine.js'
 import { DEFAULT_BIOGEOCHEMICAL_STATE } from '../../environment/biogeochemistry/types.js'
+import type { SpeciationEvent } from '../../evolution/taxonomy/types.js'
 
 export interface BiologicalStateSnapshot {
   readonly totalPopulation: number
@@ -37,6 +38,7 @@ export interface BiologicalStateSnapshot {
   readonly perturbations: SimulationSnapshot['perturbations']
   readonly prebioticState: SimulationSnapshot['prebioticState']
   readonly biogeochemical: SimulationSnapshot['biogeochemical']
+  readonly speciationEvents?: readonly SpeciationEvent[]
 }
 
 const DEFAULT_BIO_STATE: BiologicalStateSnapshot = {
@@ -51,6 +53,7 @@ const DEFAULT_BIO_STATE: BiologicalStateSnapshot = {
   perturbations: { ...DEFAULT_PERTURBATIONS },
   prebioticState: { ...DEFAULT_PREBIOTIC_STATE },
   biogeochemical: { ...DEFAULT_BIOGEOCHEMICAL_STATE },
+  speciationEvents: [],
 }
 
 export class SimulationClock {
@@ -136,6 +139,7 @@ export class SimulationClock {
       perturbations: bioState.perturbations,
       prebioticState: bioState.prebioticState,
       biogeochemical: bioState.biogeochemical,
+      speciationEvents: bioState.speciationEvents ?? [],
     }
   }
 

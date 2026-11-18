@@ -76,4 +76,27 @@ describe('AutoSaveService', () => {
     const loaded = await AutoSaveService.loadAutoSave()
     expect(loaded).toBeNull()
   })
+
+  it('wipes all data including world archives and localStorage flags', async () => {
+    // Save an autosave and a world archive
+    await AutoSaveService.saveAutoSave(sampleSave)
+    await IndexedDBService.saveWorld(sampleSave)
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('evolution_sandbox_welcomed', 'true')
+    }
+
+    expect(AutoSaveService.hasCachedAutoSave()).toBe(true)
+    const initialList = await IndexedDBService.listSaves()
+    expect(initialList.length).toBeGreaterThan(0)
+
+    // Execute wipe
+    await AutoSaveService.wipeAllData()
+
+    expect(AutoSaveService.hasCachedAutoSave()).toBe(false)
+    const afterList = await IndexedDBService.listSaves()
+    expect(afterList).toHaveLength(0)
+    if (typeof localStorage !== 'undefined') {
+      expect(localStorage.getItem('evolution_sandbox_welcomed')).toBeNull()
+    }
+  })
 })

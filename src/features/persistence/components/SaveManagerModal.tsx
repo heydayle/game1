@@ -4,6 +4,7 @@ import { SaveValidator } from '../services/SaveValidator.js'
 import { AUTOSAVE_SAVE_ID } from '../services/AutoSaveService.js'
 import type { WorldSave, WorldSaveMetadata } from '../types.js'
 import type { PlanetConfig } from '../../genesis/types/genesis.js'
+import { formatPopulation } from '../../../shared/utils/formatters.js'
 
 interface SaveManagerModalProps {
   isOpen: boolean
@@ -13,6 +14,7 @@ interface SaveManagerModalProps {
   onExportCurrentState: (name?: string) => Promise<WorldSave>
   onLoadState: (save: WorldSave) => void
   onPlanetLoaded: (planetConfig: PlanetConfig) => void
+  onOpenResetModal?: () => void
 }
 
 export function SaveManagerModal({
@@ -23,6 +25,7 @@ export function SaveManagerModal({
   onExportCurrentState,
   onLoadState,
   onPlanetLoaded,
+  onOpenResetModal,
 }: SaveManagerModalProps) {
   const [saves, setSaves] = useState<WorldSaveMetadata[]>([])
   const [customName, setCustomName] = useState('')
@@ -284,7 +287,7 @@ export function SaveManagerModal({
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-gray-400">
                         <span>Planet: {meta.planetName}</span>
                         <span>Rot: {meta.rotations}</span>
-                        <span>Pop: {meta.totalPopulation.toLocaleString()}</span>
+                        <span>Pop: {formatPopulation(meta.totalPopulation)}</span>
                         <span>Species: {meta.activeSpeciesCount}</span>
                         <span className="text-gray-500">{dateStr}</span>
                       </div>
@@ -321,13 +324,28 @@ export function SaveManagerModal({
         </div>
 
         {/* Footer */}
-        <div className="mt-4 border-t border-gray-800 pt-3 flex justify-between items-center text-[11px] text-gray-500">
-          <span>Deterministically versioned (V1) & compatible with all simulation stages.</span>
+        <div className="mt-4 border-t border-gray-800 pt-3 flex flex-wrap justify-between items-center gap-2 text-[11px] text-gray-500">
+          <div className="flex items-center gap-3">
+            <span>Phiên bản V1 — Tương thích mọi giai đoạn mô phỏng.</span>
+            {onOpenResetModal && (
+              <button
+                onClick={() => {
+                  onClose()
+                  onOpenResetModal()
+                }}
+                className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 border border-rose-500/30 bg-rose-950/40 hover:bg-rose-900/60 px-2 py-0.5 rounded transition-colors"
+                title="Xóa toàn bộ kho lưu trữ và bắt đầu thế giới mới"
+              >
+                <span>🗑️</span>
+                <span>Xóa sạch dữ liệu & Chơi mới</span>
+              </button>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="rounded bg-gray-800 px-3 py-1 text-xs text-gray-300 hover:bg-gray-700 transition-colors"
           >
-            Close
+            Đóng
           </button>
         </div>
       </div>

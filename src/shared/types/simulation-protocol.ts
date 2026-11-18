@@ -11,9 +11,10 @@ import type {
   DisasterType,
   EnvironmentalPerturbations,
 } from '../../features/disasters/types.js'
-import type { PrebioticState } from '../../features/evolution/abiogenesis/types.js'
+import type { PrebioticState, ChemicalCatalystType } from '../../features/evolution/abiogenesis/types.js'
 import type { WorldSave } from '../../features/persistence/types.js'
 import type { BiogeochemicalState } from '../../features/environment/biogeochemistry/types.js'
+import type { SpeciationEvent } from '../../features/evolution/taxonomy/types.js'
 
 // ============================================================================
 // Simulation State
@@ -55,6 +56,9 @@ export interface SimulationSnapshot {
 
   // Dynamic Biogeochemical Elemental & Atmospheric Concentrations
   readonly biogeochemical: BiogeochemicalState
+
+  // Evolutionary Speciation Events & Taxonomic Emergence
+  readonly speciationEvents?: readonly SpeciationEvent[]
 }
 
 // ============================================================================
@@ -110,6 +114,11 @@ export interface SparkBiogenesisCommand {
   readonly type: 'spark-biogenesis'
 }
 
+export interface CatalyzeChemistryCommand {
+  readonly type: 'catalyze-chemistry'
+  readonly catalystType: ChemicalCatalystType
+}
+
 export interface ExportStateCommand {
   readonly type: 'export-state'
   readonly saveName?: string
@@ -131,6 +140,7 @@ export type SimulationCommand =
   | TriggerStressCommand
   | TriggerDisasterCommand
   | SparkBiogenesisCommand
+  | CatalyzeChemistryCommand
   | ExportStateCommand
   | LoadStateCommand
 

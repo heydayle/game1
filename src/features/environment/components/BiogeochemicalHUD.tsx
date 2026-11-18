@@ -5,6 +5,8 @@ interface BiogeochemicalHUDProps {
   biogeochemical?: BiogeochemicalState
   rotations: number
   partialRotation?: number
+  embedded?: boolean
+  className?: string
 }
 
 function getTrendSymbol(trend?: GasTrend): string {
@@ -91,6 +93,8 @@ export function BiogeochemicalHUD({
   biogeochemical,
   rotations,
   partialRotation = 0,
+  embedded = false,
+  className,
 }: BiogeochemicalHUDProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [activeTab, setActiveTab] = useState<'atmosphere' | 'elemental'>('atmosphere')
@@ -106,10 +110,14 @@ export function BiogeochemicalHUD({
   const isNocturnal = cyclePhase === 'nocturnal_cooling'
   const isSeasonal = cyclePhase === 'seasonal_flux'
 
+  const containerClass = embedded
+    ? (className ?? 'w-full rounded-xl border border-white/10 bg-gray-950/80 p-3.5 font-mono text-xs shadow-xl backdrop-blur-md')
+    : 'fixed top-28 left-4 z-10 w-80 rounded-lg border border-white/10 bg-gray-950/85 p-3.5 font-mono text-xs shadow-xl backdrop-blur-md'
+
   return (
     <div
       data-testid="biogeochemical-hud"
-      className="fixed top-28 left-4 z-10 w-80 rounded-lg border border-white/10 bg-gray-950/85 p-3.5 font-mono text-xs shadow-xl backdrop-blur-md"
+      className={containerClass}
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/10 pb-2">

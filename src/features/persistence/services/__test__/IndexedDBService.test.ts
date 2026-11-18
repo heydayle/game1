@@ -84,6 +84,18 @@ describe('IndexedDBService (Storage Repository & Fallback)', () => {
     expect(loaded).toBeNull()
   })
 
+  it('clears all saves at once', async () => {
+    await IndexedDBService.saveWorld(makeSave('slot_1', 'Save 1', 1000))
+    await IndexedDBService.saveWorld(makeSave('slot_2', 'Save 2', 2000))
+
+    let list = await IndexedDBService.listSaves()
+    expect(list).toHaveLength(2)
+
+    await IndexedDBService.clearAllSaves()
+    list = await IndexedDBService.listSaves()
+    expect(list).toHaveLength(0)
+  })
+
   it('rejects saving malformed data', async () => {
     const invalidSave = { invalid: true } as unknown as WorldSave
     await expect(IndexedDBService.saveWorld(invalidSave)).rejects.toThrow('Cannot save invalid world data')

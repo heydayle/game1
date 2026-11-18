@@ -97,4 +97,43 @@ describe("SaveManagerModal", () => {
       expect(onExport).toHaveBeenCalled();
     });
   });
+
+  it("formats large totalPopulation in save items with formatPopulation (k, m, ∞)", async () => {
+    const hugeSaveMeta = {
+      saveId: "save_huge",
+      name: "Huge Population World",
+      savedAt: Date.now(),
+      schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
+      planetName: dummyPlanet.name,
+      rotations: 50,
+      totalPopulation: 2_500_000,
+      activeSpeciesCount: 4,
+      lifeStage: "inhabited" as const,
+      dominantAtmosphere: "nitrogen" as const,
+    };
+
+    // Save metadata directly to IndexedDB mock
+    const { IndexedDBService } = await import("../../services/IndexedDBService.js");
+    await IndexedDBService.saveWorld({
+      ...mockSave,
+      metadata: hugeSaveMeta,
+    });
+
+    render(
+      <SaveManagerModal
+        isOpen={true}
+        onClose={vi.fn()}
+        currentPlanet={dummyPlanet}
+        currentRotations={50}
+        onExportCurrentState={vi.fn()}
+        onLoadState={vi.fn()}
+        onPlanetLoaded={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      // 2,500,000 should be formatted as '2.5m'
+      expect(screen.getByText(/Pop: 2.5m/i)).toBeInTheDocument();
+    });
+  });
 });

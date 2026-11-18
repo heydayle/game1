@@ -39,6 +39,12 @@ export interface SerializedClockState {
 export interface SerializedPrebioticState {
   readonly stage: LifeStage
   readonly organicComplexity: number
+  readonly monomerConcentration?: number
+  readonly polymerComplexity?: number
+  readonly protocellStability?: number
+  readonly organicPoolVolume?: number
+  readonly bioticFeedbackFlux?: number
+  readonly deNovoSynthesisReady?: boolean
 }
 
 export interface SerializedDisasterState {

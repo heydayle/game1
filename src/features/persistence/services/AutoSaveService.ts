@@ -124,4 +124,25 @@ export class AutoSaveService {
     }
     await IndexedDBService.deleteSave(AUTOSAVE_SAVE_ID)
   }
+
+  /**
+   * Completely wipes all persistent game data (all world saves, auto-saves, and localStorage flags).
+   */
+  static async wipeAllData(): Promise<void> {
+    await IndexedDBService.clearAllSaves()
+    this.memoryFallback = null
+    try {
+      const storage =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage
+          : typeof localStorage !== 'undefined'
+          ? localStorage
+          : null
+      storage?.removeItem(AUTOSAVE_LOCALSTORAGE_KEY)
+      storage?.removeItem('evolution_sandbox_welcomed')
+    } catch {
+      // Ignore
+    }
+    await IndexedDBService.deleteSave(AUTOSAVE_SAVE_ID)
+  }
 }

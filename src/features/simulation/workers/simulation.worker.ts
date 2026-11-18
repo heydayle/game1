@@ -67,11 +67,14 @@ function setBioState(
   activeDisasters = disasterManager.getActiveSummaries(),
   perturbations = disasterManager.getPerturbations()
 ): void {
+  const previousEvents = currentBioState.speciationEvents ?? []
+  const newEvents = bioResult.speciationEvents ?? []
   currentBioState = {
     ...bioResult,
     activeDisasters,
     perturbations,
     biogeochemical: currentBioState.biogeochemical,
+    speciationEvents: [...previousEvents, ...newEvents],
   }
 }
 
@@ -85,6 +88,13 @@ function sendSnapshot(): void {
     type: 'snapshot',
     snapshot: clock.getSnapshot(currentBioState),
   })
+  // Clear speciationEvents buffer after sending so events are only broadcast once
+  if (currentBioState.speciationEvents && currentBioState.speciationEvents.length > 0) {
+    currentBioState = {
+      ...currentBioState,
+      speciationEvents: [],
+    }
+  }
 }
 
 function handleCommand(command: SimulationCommand): void {
@@ -209,6 +219,20 @@ function handleCommand(command: SimulationCommand): void {
     case 'spark-biogenesis':
       if (currentPlanetConfig) {
         populationManager.sparkBiogenesis(currentPlanetConfig, rng)
+        const bioResult = populationManager.step(
+          clock.getRotations(),
+          currentPlanetConfig,
+          rng,
+          disasterManager.getPerturbations()
+        )
+        setBioState(bioResult)
+        sendSnapshot()
+      }
+      break
+
+    case 'catalyze-chemistry':
+      if (currentPlanetConfig) {
+        populationManager.triggerChemicalCatalyst(command.catalystType)
         const bioResult = populationManager.step(
           clock.getRotations(),
           currentPlanetConfig,

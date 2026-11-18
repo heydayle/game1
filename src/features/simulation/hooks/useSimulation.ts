@@ -21,6 +21,7 @@ import type { DisasterType } from '../../disasters/types.js'
 import type { WorldSave } from '../../persistence/types.js'
 import { DEFAULT_PERTURBATIONS } from '../../disasters/constants.js'
 import { DEFAULT_PREBIOTIC_STATE } from '../../evolution/abiogenesis/PrebioticEngine.js'
+import type { ChemicalCatalystType } from '../../evolution/abiogenesis/types.js'
 import { DEFAULT_BIOGEOCHEMICAL_STATE } from '../../environment/biogeochemistry/types.js'
 import { SimulationWorkerBridge } from '../services/SimulationWorkerBridge.js'
 
@@ -82,6 +83,7 @@ export interface UseSimulationResult {
     epicenterCellId?: number
   ) => void
   sparkBiogenesis: () => void
+  catalyzeChemistry: (catalystType: ChemicalCatalystType) => void
   exportState: (saveName?: string) => Promise<WorldSave>
   loadState: (save: WorldSave) => void
 }
@@ -155,6 +157,10 @@ export function useSimulation(): UseSimulationResult {
     bridgeRef.current?.sparkBiogenesis()
   }, [])
 
+  const catalyzeChemistry = useCallback((catalystType: ChemicalCatalystType) => {
+    bridgeRef.current?.catalyzeChemistry(catalystType)
+  }, [])
+
   const exportState = useCallback(async (saveName?: string): Promise<WorldSave> => {
     if (!bridgeRef.current) {
       throw new Error('Simulation worker not ready')
@@ -179,6 +185,7 @@ export function useSimulation(): UseSimulationResult {
     triggerStress,
     triggerDisaster,
     sparkBiogenesis,
+    catalyzeChemistry,
     exportState,
     loadState,
   }
