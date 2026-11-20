@@ -109,10 +109,15 @@ export class PopulationManager {
       chemistry.archetype
     )
 
+    const derivedTier = UniversalTaxonomyEngine.deriveEvolutionTier(
+      primordialGenotype,
+      planetConfig
+    )
     const foundingTraits = TaxonomyEngine.evaluateTraits(
       primordialGenotype,
       1,
-      planetConfig
+      planetConfig,
+      derivedTier
     )
     const foundingName = TaxonomyEngine.generateSpeciesDisplayName(
       foundingTraits.tier,
@@ -242,10 +247,16 @@ export class PopulationManager {
     const newSpeciesId = `sp_${this.nextSpeciesId++}`
     const branchIndex = this.speciesMap.size + 1
 
+    const targetConfig = this.planetConfig ?? planetConfig
+    const derivedTier = UniversalTaxonomyEngine.deriveEvolutionTier(
+      mutatedGenotype,
+      targetConfig
+    )
     const traits = TaxonomyEngine.evaluateTraits(
       mutatedGenotype,
       1,
-      this.planetConfig ?? planetConfig
+      targetConfig,
+      derivedTier
     )
     const speciesName = TaxonomyEngine.generateSpeciesDisplayName(
       traits.tier,
@@ -1131,10 +1142,16 @@ export class PopulationManager {
           if (dist > speciationThreshold) {
             const newSpeciesId = `sp_${this.nextSpeciesId++}`
             const branchIndex = this.speciesMap.size + 1
+            const targetConfig = this.planetConfig ?? planetConfig
+            const derivedTier = UniversalTaxonomyEngine.deriveEvolutionTier(
+              mutated,
+              targetConfig
+            )
             const traits = TaxonomyEngine.evaluateTraits(
               mutated,
               childGen,
-              this.planetConfig ?? planetConfig
+              targetConfig,
+              derivedTier
             )
             const branchName = TaxonomyEngine.generateSpeciesDisplayName(
               traits.tier,

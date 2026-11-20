@@ -4,7 +4,7 @@ import type { LifeStage } from '../evolution/abiogenesis/types.js'
 import type { ActiveDisaster } from '../disasters/types.js'
 import type { SimulationStatus, TimeWarpSpeed } from '../../shared/types/simulation-protocol.js'
 
-export const CURRENT_SAVE_SCHEMA_VERSION = 1
+export const CURRENT_SAVE_SCHEMA_VERSION = 2
 
 export interface SerializedSpecies {
   readonly id: string
@@ -86,6 +86,8 @@ export interface WorldSave {
     readonly biogenicOxygen: number
     readonly biogenicCarbonFixed: number
     readonly biogenicMethane: number
+    readonly oceanDissolvedIron?: number
+    readonly totalBifDeposited?: number
   }
 }
 

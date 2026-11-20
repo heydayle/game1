@@ -131,10 +131,15 @@ function handleCommand(command: SimulationCommand): void {
     case 'tick': {
       const completedRotations = clock.tick(command.deltaMs)
       if (completedRotations > 0 && currentPlanetConfig) {
-        // Cap biological step calculations per tick to avoid worker backlog choking
-        const bioSteps = Math.min(completedRotations, 10)
-        for (let i = 0; i < bioSteps; i++) {
-          const currentRot = clock.getRotations()
+        // Distribute completed rotations smoothly without static rotation freezing or dropping time
+        const stepCount = Math.min(completedRotations, 10)
+        const rotStepDelta = completedRotations / stepCount
+        const endRot = clock.getRotations()
+        let currentProgressRot = endRot - completedRotations
+
+        for (let i = 0; i < stepCount; i++) {
+          currentProgressRot += rotStepDelta
+          const currentRot = Math.round(currentProgressRot)
           const perturbations = disasterManager.step(currentRot, rng, currentPlanetConfig)
           const bioResult = populationManager.step(
             currentRot,

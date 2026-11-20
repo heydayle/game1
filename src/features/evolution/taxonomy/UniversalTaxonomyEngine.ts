@@ -18,6 +18,7 @@ import type { PlanetConfig } from '../../genesis/types/genesis.js'
 import { GeneExpression } from '../genetics/Gene.js'
 import type { Genotype } from '../genetics/types.js'
 import { TraitRegistry } from '../traits/TraitRegistry.js'
+import type { EvolutionTier } from './types.js'
 import type {
   BehaviorTrait,
   ClassificationResult,
@@ -762,6 +763,55 @@ export class UniversalTaxonomyEngine {
       hasSpeculativeTraits: speculativeTraitIds.length > 0,
       speculativeTraitIds,
     }
+  }
+
+  /**
+   * Derives the authentic biological EvolutionTier from genotype × planetary environment,
+   * completely decoupled from generation count.
+   *
+   * Biological Milestones:
+   * 1. Unicellular prokaryote vs eukaryote (metabolic rate & compartmentalization).
+   * 2. Colonial aggregate (simple_multicellular).
+   * 3. Differentiated tissue (plantae, early metazoan, fungi).
+   * 4. Metazoan Animals (primitive_animal / radial vs complex_bilaterian / bilateral).
+   * 5. Advanced (circulatory, vascular, organ systems).
+   * 6. Sapient (learning, high neural complexity, K-strategy investment).
+   */
+  static deriveEvolutionTier(
+    genotype: Genotype,
+    planetConfig: PlanetConfig
+  ): EvolutionTier {
+    const expressed = GeneExpression.expressGenotype(genotype)
+    const profile = UniversalTaxonomyEngine.evaluateTraitProfile(genotype, planetConfig)
+    const { lifeArchitecture, complexityIndex, trophicStrategies, morphologyTraits, behaviorTraits } = profile
+
+    if (lifeArchitecture === 'unicellular') {
+      return expressed.metabolicRate >= 1.6 ? 'eukaryote' : 'prokaryote'
+    }
+    if (lifeArchitecture === 'colonial') {
+      return 'simple_multicellular'
+    }
+    // Multicellular, modular, distributed, hybrid
+    if (complexityIndex < 0.45) {
+      return 'differentiated_tissue'
+    }
+    if (complexityIndex < 0.65) {
+      const isAnimal = trophicStrategies.some(
+        (t) => t === 'consumer' || t === 'predator' || t === 'parasite'
+      )
+      if (isAnimal) {
+        return morphologyTraits.includes('bilateral')
+          ? 'complex_bilaterian'
+          : 'primitive_animal'
+      }
+      return 'differentiated_tissue'
+    }
+    if (complexityIndex < 0.85) {
+      return 'advanced'
+    }
+    // High complexity (>= 0.85): requires sapient behavioral or neural prerequisites
+    const isSapient = behaviorTraits.includes('learning_capable') || complexityIndex >= 0.88
+    return isSapient ? 'sapient' : 'advanced'
   }
 
   /**

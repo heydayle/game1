@@ -99,5 +99,24 @@ describe('SaveValidator', () => {
     expect(res.isValid).toBe(false)
     expect(res.error).toContain('JSON Parse Error')
   })
+
+  it('migrates schemaVersion 1 save smoothly to version 2', () => {
+    const v1Save = {
+      ...sampleValidSave,
+      schemaVersion: 1,
+      metadata: { ...sampleValidSave.metadata, schemaVersion: 1 },
+      biogeochemical: {
+        biogenicOxygen: 0.5,
+        biogenicCarbonFixed: 0.2,
+        biogenicMethane: 0.1,
+      },
+    }
+    const res = SaveValidator.validate(v1Save)
+    expect(res.isValid).toBe(true)
+    expect(res.save?.schemaVersion).toBe(2)
+    expect(res.save?.metadata.schemaVersion).toBe(2)
+    expect(res.save?.biogeochemical?.oceanDissolvedIron).toBe(100.0)
+    expect(res.save?.biogeochemical?.totalBifDeposited).toBe(0.0)
+  })
 })
 

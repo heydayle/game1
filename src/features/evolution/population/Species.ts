@@ -1,7 +1,8 @@
 import type { PlanetConfig } from '../../genesis/types/genesis.js'
 import type { Genotype, SpeciesSummary } from '../genetics/types.js'
 import { TaxonomyEngine } from '../taxonomy/TaxonomyEngine.js'
-import type { BiologicalTraits, PopulationDemographics } from '../taxonomy/types.js'
+import { UniversalTaxonomyEngine } from '../taxonomy/UniversalTaxonomyEngine.js'
+import type { BiologicalTraits, EvolutionTier, PopulationDemographics } from '../taxonomy/types.js'
 import type { Organism } from './Organism.js'
 
 const SPECIES_PALETTES = [
@@ -34,23 +35,36 @@ export class Species {
     emergenceRotation = 0,
     colorIndex = 0,
     customColor?: string,
-    planetConfig?: PlanetConfig
+    planetConfig?: PlanetConfig,
+    customTier?: EvolutionTier
   ) {
     this.id = id
     this.name = name
     this.foundingGenotype = foundingGenotype
     this.emergenceRotation = emergenceRotation
     this.color = customColor ?? SPECIES_PALETTES[colorIndex % SPECIES_PALETTES.length] ?? '#10b981'
-    this.traits = TaxonomyEngine.evaluateTraits(foundingGenotype, this.generation, planetConfig)
+    const tier =
+      customTier ??
+      (planetConfig && this.generation <= 1
+        ? UniversalTaxonomyEngine.deriveEvolutionTier(foundingGenotype, planetConfig)
+        : undefined)
+    this.traits = TaxonomyEngine.evaluateTraits(foundingGenotype, this.generation, planetConfig, tier)
   }
 
   /**
    * Recalculates traits and evolutionary tier as species generations advance.
    * Returns true if the species ascended to a higher tier.
    */
-  updateTraits(planetConfig?: PlanetConfig): boolean {
+  updateTraits(planetConfig?: PlanetConfig, customTier?: EvolutionTier): boolean {
     const prevTier = this.traits.tier
-    this.traits = TaxonomyEngine.evaluateTraits(this.foundingGenotype, this.generation, planetConfig)
+    const tier =
+      customTier ??
+      (this.generation > 1
+        ? undefined
+        : planetConfig
+          ? UniversalTaxonomyEngine.deriveEvolutionTier(this.foundingGenotype, planetConfig)
+          : undefined)
+    this.traits = TaxonomyEngine.evaluateTraits(this.foundingGenotype, this.generation, planetConfig, tier)
     return this.traits.tier !== prevTier
   }
 

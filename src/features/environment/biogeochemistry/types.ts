@@ -32,6 +32,11 @@ export interface BiogeochemicalState {
     | 'Volcanic Greenhouse'
     | 'Glacial Cryo-Lock'
     | 'Impact Fallback'
+  readonly redoxSinks?: {
+    readonly oceanDissolvedIron: number // [0, 100]%
+    readonly totalBifDeposited: number
+    readonly goeTriggered: boolean
+  }
 }
 
 export const DEFAULT_BIOGEOCHEMICAL_STATE: BiogeochemicalState = {
@@ -65,4 +70,9 @@ export const DEFAULT_BIOGEOCHEMICAL_STATE: BiogeochemicalState = {
   },
   cyclePhase: 'diurnal_peak',
   dominantBiochemicalRegime: 'Primordial Anoxic',
+  redoxSinks: {
+    oceanDissolvedIron: 100.0,
+    totalBifDeposited: 0.0,
+    goeTriggered: false,
+  },
 }

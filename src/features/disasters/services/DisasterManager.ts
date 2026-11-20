@@ -44,7 +44,8 @@ export class DisasterManager {
    */
   private selectDisasterType(
     rng?: { next(): number } | null,
-    planetConfig?: PlanetConfig | null
+    planetConfig?: PlanetConfig | null,
+    currentRotation = 0
   ): DisasterType {
     const types: DisasterType[] = [
       'asteroid_impact',
@@ -60,6 +61,13 @@ export class DisasterManager {
       volcanic_eruption: 1.0,
       climate_shift: 1.0,
       solar_flare: 1.0,
+    }
+
+    if (currentRotation > 0) {
+      // Celestial mechanics & planetary aging: impact bombardment and mantle volcanism decay with deep time
+      const decayRatio = Math.exp(-currentRotation / 15000.0)
+      weights.asteroid_impact *= 0.35 + 0.65 * decayRatio
+      weights.volcanic_eruption *= 0.45 + 0.55 * decayRatio
     }
 
     if (planetConfig) {
@@ -171,7 +179,7 @@ export class DisasterManager {
         const roll = rng ? rng.next() : Math.random()
 
         if (roll < disasterChance) {
-          const chosenType = this.selectDisasterType(rng, planetConfig)
+          const chosenType = this.selectDisasterType(rng, planetConfig, currentRotation)
           const sevRoll = rng ? rng.next() : Math.random()
           const severity = Number((0.35 + sevRoll * 0.5).toFixed(2))
           const epicenterCellId = Math.floor((rng ? rng.next() : Math.random()) * 100)

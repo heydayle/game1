@@ -17,6 +17,8 @@ export class BiogeochemicalEngine {
   private biogenicOxygen = 0.0
   private biogenicCarbonFixed = 0.0
   private biogenicMethane = 0.0
+  private oceanDissolvedIron = 100.0 // Percentage [0.0, 100.0]%
+  private totalBifDeposited = 0.0
 
   // History tracking for trend calculations (last 4 samples)
   private o2History: number[] = []
@@ -32,6 +34,8 @@ export class BiogeochemicalEngine {
     this.biogenicOxygen = 0.0
     this.biogenicCarbonFixed = 0.0
     this.biogenicMethane = 0.0
+    this.oceanDissolvedIron = 100.0
+    this.totalBifDeposited = 0.0
     this.o2History = []
     this.co2History = []
     this.ch4History = []
@@ -94,13 +98,27 @@ export class BiogeochemicalEngine {
       o2ProductionRate = 0.08 * popScaling * sunlightAvailability
       carbonFixationRate = 0.06 * popScaling * sunlightAvailability
 
-      // Basal metabolic respiration consumes O2 and releases CO2
+      // Geochemical ocean iron sink (Fe2+): absorbs O2 to form Banded Iron Formations (BIF)
+      let atmosphericO2Flux = o2ProductionRate
+      if (this.oceanDissolvedIron > 0) {
+        const ironDepletion = Math.min(this.oceanDissolvedIron, o2ProductionRate * 3.0)
+        this.oceanDissolvedIron = Math.max(0.0, this.oceanDissolvedIron - ironDepletion)
+        this.totalBifDeposited += ironDepletion
+        // As long as ocean dissolved iron remains abundant, 85% of produced oxygen is sequestered into BIF
+        const ironRetentionFactor = 0.15 + 0.85 * (1.0 - this.oceanDissolvedIron / 100.0)
+        atmosphericO2Flux = o2ProductionRate * ironRetentionFactor
+      }
+
+      // Basal metabolic respiration consumes O2 (limited by ambient oxygen in anoxic worlds)
+      const currentAmbientO2 = Math.max(0.0, baseAtm.oxygen + this.biogenicOxygen)
+      const o2Availability = Math.min(1.0, currentAmbientO2 / 2.0)
       const avgResilience =
         speciesSummaries.length > 0
           ? speciesSummaries.reduce((acc, s) => acc + s.dominantTraits.resilience, 0) /
             speciesSummaries.length
           : 0.5
       co2RespirationRate = 0.04 * popScaling * (0.8 + 0.4 * avgResilience)
+      const o2ConsumedByRespiration = co2RespirationRate * o2Availability * 0.5
 
       // Anaerobic methanogenesis flourishes when oxygen is still primitive/anoxic
       if (baseAtm.oxygen + this.biogenicOxygen < 8.0) {
@@ -113,7 +131,7 @@ export class BiogeochemicalEngine {
       // Accumulate biogenic shift (smooth saturation curves)
       this.biogenicOxygen = Math.max(
         -baseAtm.oxygen * 0.8,
-        Math.min(32.0 - baseAtm.oxygen, this.biogenicOxygen + (o2ProductionRate - co2RespirationRate * 0.5))
+        Math.min(32.0 - baseAtm.oxygen, this.biogenicOxygen + (atmosphericO2Flux - o2ConsumedByRespiration))
       )
       this.biogenicCarbonFixed = Math.max(
         0.0,
@@ -269,6 +287,11 @@ export class BiogeochemicalEngine {
       },
       cyclePhase,
       dominantBiochemicalRegime,
+      redoxSinks: {
+        oceanDissolvedIron: Number(this.oceanDissolvedIron.toFixed(2)),
+        totalBifDeposited: Number(this.totalBifDeposited.toFixed(2)),
+        goeTriggered: this.oceanDissolvedIron <= 5.0,
+      },
     }
   }
 
@@ -304,11 +327,15 @@ export class BiogeochemicalEngine {
     biogenicOxygen: number
     biogenicCarbonFixed: number
     biogenicMethane: number
+    oceanDissolvedIron?: number
+    totalBifDeposited?: number
   } {
     return {
       biogenicOxygen: this.biogenicOxygen,
       biogenicCarbonFixed: this.biogenicCarbonFixed,
       biogenicMethane: this.biogenicMethane,
+      oceanDissolvedIron: this.oceanDissolvedIron,
+      totalBifDeposited: this.totalBifDeposited,
     }
   }
 
@@ -316,9 +343,13 @@ export class BiogeochemicalEngine {
     biogenicOxygen: number
     biogenicCarbonFixed: number
     biogenicMethane: number
+    oceanDissolvedIron?: number
+    totalBifDeposited?: number
   }): void {
     this.biogenicOxygen = state.biogenicOxygen ?? 0.0
     this.biogenicCarbonFixed = state.biogenicCarbonFixed ?? 0.0
     this.biogenicMethane = state.biogenicMethane ?? 0.0
+    this.oceanDissolvedIron = state.oceanDissolvedIron ?? 100.0
+    this.totalBifDeposited = state.totalBifDeposited ?? 0.0
   }
 }

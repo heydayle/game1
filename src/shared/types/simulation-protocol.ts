@@ -15,6 +15,7 @@ import type { PrebioticState, ChemicalCatalystType } from '../../features/evolut
 import type { WorldSave } from '../../features/persistence/types.js'
 import type { BiogeochemicalState } from '../../features/environment/biogeochemistry/types.js'
 import type { SpeciationEvent } from '../../features/evolution/taxonomy/types.js'
+import type { GeologicalTimeSnapshot } from '../../features/simulation/engine/DeepTimeEngine.js'
 
 // ============================================================================
 // Simulation State
@@ -37,6 +38,8 @@ export interface SimulationSnapshot {
   readonly wallClockTime: number
   /** Snapshot version for compatibility checks */
   readonly version: number
+  /** Geological deep time information (Eons, Eras, Ma, Ga) */
+  readonly geologicalTime?: GeologicalTimeSnapshot
 
   // Biological & Ecosystem Simulation State (Phases 4 & 5)
   readonly totalPopulation: number

@@ -13,7 +13,10 @@ import {
   type SapientLogEntry,
 } from "./features/evolution/components/SapientEvolutionLogHUD.js";
 import { SpeciationAlertToast } from "./features/evolution/components/SpeciationAlertToast.js";
-import type { BiologicalTraits, EvolutionTier } from "./features/evolution/taxonomy/types.js";
+import type {
+  BiologicalTraits,
+  EvolutionTier,
+} from "./features/evolution/taxonomy/types.js";
 import { GenesisModal } from "./features/genesis/components/GenesisModal.js";
 import { WelcomeOnboardingModal } from "./features/genesis/components/WelcomeOnboardingModal.js";
 import { ResetDataConfirmationModal } from "./features/persistence/components/ResetDataConfirmationModal.js";
@@ -39,7 +42,7 @@ import { usePlanetStore } from "./stores/planet-store.js";
  */
 export function isModernIntelligentHigherOrganism(
   traits?: BiologicalTraits | null,
-  tier?: EvolutionTier | string | null
+  tier?: EvolutionTier | string | null,
 ): boolean {
   if (!traits) {
     // Không có dữ liệu đặc tính sinh học để xác thực -> coi là bình thường, không tạm dừng
@@ -47,33 +50,33 @@ export function isModernIntelligentHigherOrganism(
   }
 
   // 1. Phải là động vật đa bào (fauna) - TUYỆT ĐỐI KHÔNG PHẢI vi sinh vật, thực vật, hay nấm
-  if (traits.domain !== 'fauna') {
+  if (traits.domain !== "fauna") {
     return false;
   }
 
   // 2. Không chấp nhận các sinh vật bình thường thuộc các cấp bậc thấp hoặc trung bình
   const actualTier = traits.tier ?? tier;
   if (
-    actualTier === 'prokaryote' ||
-    actualTier === 'unicellular' ||
-    actualTier === 'eukaryote' ||
-    actualTier === 'simple_multicellular' ||
-    actualTier === 'differentiated_tissue' ||
-    actualTier === 'primitive_animal' ||
-    actualTier === 'complex_bilaterian'
+    actualTier === "prokaryote" ||
+    actualTier === "unicellular" ||
+    actualTier === "eukaryote" ||
+    actualTier === "simple_multicellular" ||
+    actualTier === "differentiated_tissue" ||
+    actualTier === "primitive_animal" ||
+    actualTier === "complex_bilaterian"
   ) {
     return false;
   }
 
   // 3. Cơ thể phải thuộc nhánh hiện đại đối xứng hai bên (bilateral)
-  if (traits.bodySymmetry !== 'bilateral') {
+  if (traits.bodySymmetry !== "bilateral") {
     return false;
   }
 
   // 4. Phải là sinh vật đa bào bậc cao có trí thông minh hiện đại:
   // - Cấp bậc trí tuệ ('sapient')
   // - Hoặc có hình thái trí tuệ rõ rệt (humanoid giống con người, hoặc động vật hiện đại có trí thông minh như Thủy tộc/Dực nhân/Cryo-Titan)
-  const isSapientTier = actualTier === 'sapient';
+  const isSapientTier = actualTier === "sapient";
   const hasSapientArchetype = Boolean(traits.sapientArchetype);
 
   if (!isSapientTier && !hasSapientArchetype) {
@@ -81,7 +84,7 @@ export function isModernIntelligentHigherOrganism(
   }
 
   // 5. Nếu là động vật bậc cao thông thường (advanced) mà không có hình thái trí tuệ, không tạm dừng
-  if (actualTier === 'advanced' && !hasSapientArchetype) {
+  if (actualTier === "advanced" && !hasSapientArchetype) {
     return false;
   }
 
@@ -120,22 +123,20 @@ export default function App() {
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
-  const [selectedSpeciesId, setSelectedSpeciesId] = useState<string | null>(null);
+  const [selectedSpeciesId, setSelectedSpeciesId] = useState<string | null>(
+    null,
+  );
   const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false);
-  const [activeRightTab, setActiveRightTab] = useState<EvolutionTabType>("ecosystem");
+  const [activeRightTab, setActiveRightTab] =
+    useState<EvolutionTabType>("ecosystem");
   const [isCinematic, setIsCinematic] = useState(false);
   const [isHudVisible, setIsHudVisible] = useState(true);
   const [isSoundMuted, setIsSoundMuted] = useState(() => SoundFX.getMuted());
   const isRestoringSaveRef = useRef(false);
 
-  // Sapient Intelligence Emergence Auto-Pause (10s) and Persistent Bottom-Left Log
+  // Sapient Intelligence Emergence - Persistent Bottom-Left Log
   const [sapientLogs, setSapientLogs] = useState<SapientLogEntry[]>([]);
-  const [sapientCountdown, setSapientCountdown] = useState<number | null>(null);
   const handledSapientSpeciesIdsRef = useRef(new Set<string>());
-  const autoPausedSpeedRef = useRef<number>(1);
-  const isAutoPausedRef = useRef(false);
-  const autoPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Monitor for emergence of intelligent / sapient species
   useEffect(() => {
@@ -143,17 +144,23 @@ export default function App() {
     let newlyFoundSapientSpecies: SapientLogEntry | null = null;
 
     for (const ev of events) {
-      const isModernIntelligent = isModernIntelligentHigherOrganism(ev.traits, ev.tier);
+      const isModernIntelligent = isModernIntelligentHigherOrganism(
+        ev.traits,
+        ev.tier,
+      );
 
-      if (isModernIntelligent && !handledSapientSpeciesIdsRef.current.has(ev.speciesId)) {
+      if (
+        isModernIntelligent &&
+        !handledSapientSpeciesIdsRef.current.has(ev.speciesId)
+      ) {
         handledSapientSpeciesIdsRef.current.add(ev.speciesId);
         newlyFoundSapientSpecies = {
           id: `sapient_log_${ev.speciesId}_${Date.now()}`,
           speciesId: ev.speciesId,
           speciesName: ev.speciesName,
           scientificName: ev.scientificName ?? ev.traits?.scientificName,
-          tier: ev.tier ?? 'sapient',
-          tierLabel: ev.tierLabel ?? 'Sinh vật Trí tuệ Bậc cao',
+          tier: ev.tier ?? "sapient",
+          tierLabel: ev.tierLabel ?? "Sinh vật Trí tuệ Bậc cao",
           sapientArchetype: ev.traits?.sapientArchetype,
           sapientLabel: ev.traits?.sapientLabel,
           color: ev.color,
@@ -172,15 +179,19 @@ export default function App() {
           !sp.isExtinct &&
           isModernIntelligentHigherOrganism(sp.biologicalTraits, sp.tier);
 
-        if (isModernIntelligent && !handledSapientSpeciesIdsRef.current.has(sp.id)) {
+        if (
+          isModernIntelligent &&
+          !handledSapientSpeciesIdsRef.current.has(sp.id)
+        ) {
           handledSapientSpeciesIdsRef.current.add(sp.id);
           newlyFoundSapientSpecies = {
             id: `sapient_log_${sp.id}_${Date.now()}`,
             speciesId: sp.id,
             speciesName: sp.name,
-            scientificName: sp.scientificName ?? sp.biologicalTraits?.scientificName,
-            tier: sp.tier ?? 'sapient',
-            tierLabel: sp.tierLabel ?? 'Sinh vật Trí tuệ Bậc cao',
+            scientificName:
+              sp.scientificName ?? sp.biologicalTraits?.scientificName,
+            tier: sp.tier ?? "sapient",
+            tierLabel: sp.tierLabel ?? "Sinh vật Trí tuệ Bậc cao",
             sapientArchetype: sp.biologicalTraits?.sapientArchetype,
             sapientLabel: sp.biologicalTraits?.sapientLabel,
             color: sp.color,
@@ -197,71 +208,14 @@ export default function App() {
     if (newlyFoundSapientSpecies) {
       const entry = newlyFoundSapientSpecies;
       setSapientLogs((prev) => [entry, ...prev]);
-
-      if (snapshot.status === 'running') {
-        const currentSpeed = snapshot.speed;
-        autoPausedSpeedRef.current = currentSpeed;
-        isAutoPausedRef.current = true;
-
-        pause();
-        SoundFX.playSpeciation();
-
-        setSapientCountdown(10);
-
-        if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
-        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-
-        let remaining = 10;
-        countdownIntervalRef.current = setInterval(() => {
-          remaining -= 1;
-          if (remaining > 0) {
-            setSapientCountdown(remaining);
-          } else {
-            if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-            countdownIntervalRef.current = null;
-          }
-        }, 1000);
-
-        autoPauseTimerRef.current = setTimeout(() => {
-          setSapientCountdown(null);
-          if (isAutoPausedRef.current) {
-            setSpeed(autoPausedSpeedRef.current as any);
-            start();
-            isAutoPausedRef.current = false;
-          }
-        }, 10000);
-      }
+      SoundFX.playSpeciation();
     }
   }, [
     snapshot.speciationEvents,
     snapshot.speciesSummaries,
-    snapshot.status,
-    snapshot.speed,
     snapshot.rotations,
     snapshot.generation,
-    pause,
-    start,
-    setSpeed,
   ]);
-
-  // Clean up timers on unmount
-  useEffect(() => {
-    return () => {
-      if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    };
-  }, []);
-
-  const handleResumeSapientPause = () => {
-    if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    setSapientCountdown(null);
-    if (isAutoPausedRef.current) {
-      setSpeed(autoPausedSpeedRef.current as any);
-      start();
-      isAutoPausedRef.current = false;
-    }
-  };
 
   const handleDismissSapientLog = (logId: string) => {
     setSapientLogs((prev) => prev.filter((l) => l.id !== logId));
@@ -320,7 +274,10 @@ export default function App() {
     prevActiveDisasterIdsRef.current = currentIds;
   }, [snapshot.activeDisasters]);
 
-  const handleTriggerDisaster = (disasterType: DisasterType, severity = 0.8) => {
+  const handleTriggerDisaster = (
+    disasterType: DisasterType,
+    severity = 0.8,
+  ) => {
     triggerDisaster(disasterType, severity);
   };
 
@@ -511,14 +468,13 @@ export default function App() {
         }}
       />
 
-      {/* Persistent Bottom-Left Log for Sapient Intelligence Emergence (Auto-Pause 10s) */}
+      {/* Persistent Bottom-Left Log for Sapient Intelligence Emergence */}
       <SapientEvolutionLogHUD
         logs={sapientLogs}
-        countdownSeconds={sapientCountdown}
-        savedSpeed={autoPausedSpeedRef.current}
+        countdownSeconds={null}
+        savedSpeed={snapshot.speed}
         onDismiss={handleDismissSapientLog}
         onDismissAll={handleDismissAllSapientLogs}
-        onResumeNow={handleResumeSapientPause}
         onSelectSpecies={(id) => {
           setSelectedSpeciesId(id);
           setActiveRightTab("species");
@@ -732,4 +688,3 @@ export default function App() {
     </div>
   );
 }
-

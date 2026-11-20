@@ -25,6 +25,7 @@ import { DEFAULT_PERTURBATIONS } from '../../disasters/constants.js'
 import { DEFAULT_PREBIOTIC_STATE } from '../../evolution/abiogenesis/PrebioticEngine.js'
 import { DEFAULT_BIOGEOCHEMICAL_STATE } from '../../environment/biogeochemistry/types.js'
 import type { SpeciationEvent } from '../../evolution/taxonomy/types.js'
+import { DeepTimeEngine, type GeologicalTimeSnapshot } from './DeepTimeEngine.js'
 
 export interface BiologicalStateSnapshot {
   readonly totalPopulation: number
@@ -142,7 +143,12 @@ export class SimulationClock {
       prebioticState: bioState.prebioticState,
       biogeochemical: bioState.biogeochemical,
       speciationEvents: bioState.speciationEvents ?? [],
+      geologicalTime: DeepTimeEngine.calculate(this.rotations),
     }
+  }
+
+  getGeologicalTime(): GeologicalTimeSnapshot {
+    return DeepTimeEngine.calculate(this.rotations)
   }
 
   getStatus(): SimulationStatus {

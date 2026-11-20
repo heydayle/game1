@@ -89,12 +89,26 @@ export class SaveValidator {
    * Applies schema migrations sequentially from older versions to CURRENT_SAVE_SCHEMA_VERSION.
    */
   static migrate(save: WorldSave): WorldSave {
-    // Currently at version 1; migration hook ready for future schemas
-    if (save.schemaVersion === CURRENT_SAVE_SCHEMA_VERSION) {
-      return save
+    let current = save
+    if (current.schemaVersion === 1) {
+      current = {
+        ...current,
+        schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
+        metadata: {
+          ...current.metadata,
+          schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
+        },
+        biogeochemical: current.biogeochemical
+          ? {
+              ...current.biogeochemical,
+              oceanDissolvedIron: current.biogeochemical.oceanDissolvedIron ?? 100.0,
+              totalBifDeposited: current.biogeochemical.totalBifDeposited ?? 0.0,
+            }
+          : undefined,
+      }
     }
 
-    return save
+    return current
   }
 
   /**
