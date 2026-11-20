@@ -1,5 +1,5 @@
 import { SeededRNG } from '../../../shared/utils/seeded-rng.js'
-import type { Allele, DominanceType, Gene, Genotype, GeneticLocus } from '../genetics/types.js'
+import type { Allele, DominanceType, Gene, Genotype } from '../genetics/types.js'
 
 export interface MutationConfig {
   readonly baseMutationRate: number // e.g. 0.05 per locus
@@ -65,14 +65,15 @@ export class MutationEngine {
 
   /**
    * Mutates an entire genotype.
+   * Works with any string loci — not restricted to GeneticLocusCore.
    */
   static mutateGenotype(
     genotype: Genotype,
     config: MutationConfig,
     rng: SeededRNG
   ): Genotype {
-    const loci = Object.keys(genotype.genes) as GeneticLocus[]
-    const newGenes = {} as Record<GeneticLocus, Gene>
+    const loci = Object.keys(genotype.genes)
+    const newGenes: Record<string, Gene> = {}
 
     for (const locus of loci) {
       const g = genotype.genes[locus]
@@ -81,7 +82,10 @@ export class MutationEngine {
       }
     }
 
-    return { genes: newGenes }
+    return {
+      genes: newGenes,
+      hereditaryArchitecture: genotype.hereditaryArchitecture,
+    }
   }
 
   private static getRadiationMultiplier(level: MutationConfig['radiationLevel']): number {

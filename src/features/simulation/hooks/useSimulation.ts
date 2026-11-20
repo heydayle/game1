@@ -82,6 +82,7 @@ export interface UseSimulationResult {
     severity?: number,
     epicenterCellId?: number
   ) => void
+  setAutoDisasters: (enabled: boolean) => void
   sparkBiogenesis: () => void
   catalyzeChemistry: (catalystType: ChemicalCatalystType) => void
   exportState: (saveName?: string) => Promise<WorldSave>
@@ -153,6 +154,10 @@ export function useSimulation(): UseSimulationResult {
     []
   )
 
+  const setAutoDisasters = useCallback((enabled: boolean) => {
+    bridgeRef.current?.setAutoDisasters(enabled)
+  }, [])
+
   const sparkBiogenesis = useCallback(() => {
     bridgeRef.current?.sparkBiogenesis()
   }, [])
@@ -184,6 +189,7 @@ export function useSimulation(): UseSimulationResult {
     seedPopulation,
     triggerStress,
     triggerDisaster,
+    setAutoDisasters,
     sparkBiogenesis,
     catalyzeChemistry,
     exportState,

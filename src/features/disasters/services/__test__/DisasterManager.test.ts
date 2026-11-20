@@ -82,5 +82,45 @@ describe('DisasterManager', () => {
     expect(manager.getActiveSummaries().length).toBe(0)
     expect(manager.getPerturbations().temperatureDeltaCelsius).toBe(0)
   })
+
+  it('spontaneously spawns natural disasters at arbitrary rotation intervals when enabled', () => {
+    // Enable auto-disasters with high probability for testing
+    manager.setAutoDisastersEnabled(true)
+    manager.setDisasterIntervalConfig(10, 1.0) // 10 rotations peace, 100% chance
+
+    // Before rotation 25, no spontaneous disasters spawn (safety buffer for primordial life)
+    for (let r = 0; r < 24; r++) {
+      manager.step(r)
+    }
+    expect(manager.getActiveSummaries().length).toBe(0)
+
+    // At rotation 25+, spontaneous disaster strikes!
+    manager.step(25)
+    expect(manager.getActiveSummaries().length).toBe(1)
+    const activeDisaster = manager.getActiveSummaries()[0]!
+    expect(activeDisaster.remainingRotations).toBeGreaterThan(0)
+    expect(activeDisaster.severity).toBeGreaterThanOrEqual(0.35)
+  })
+
+  it('respects auto-disasters disabled flag', () => {
+    manager.setAutoDisastersEnabled(false)
+    manager.setDisasterIntervalConfig(5, 1.0)
+
+    for (let r = 0; r <= 50; r++) {
+      manager.step(r)
+    }
+    expect(manager.getActiveSummaries().length).toBe(0)
+  })
+
+  it('preserves auto-disaster state across export and restore', () => {
+    manager.setAutoDisastersEnabled(false)
+    const exported = manager.exportState()
+    expect(exported.autoDisastersEnabled).toBe(false)
+
+    const newManager = new DisasterManager()
+    expect(newManager.isAutoDisastersEnabled()).toBe(true)
+    newManager.restoreState(exported, 10)
+    expect(newManager.isAutoDisastersEnabled()).toBe(false)
+  })
 })
 

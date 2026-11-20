@@ -51,6 +51,8 @@ export interface SerializedDisasterState {
   readonly activeDisasters: readonly ActiveDisaster[]
   readonly nextDisasterId: number
   readonly lastPulseRotation: number
+  readonly autoDisastersEnabled?: boolean
+  readonly lastDisasterEndRotation?: number
 }
 
 export interface WorldSaveMetadata {

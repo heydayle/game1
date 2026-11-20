@@ -9,6 +9,7 @@ import type {
   SapientArchetype,
   TrophicMode,
   TrophicRole,
+  TaxonomicHierarchy,
 } from './types.js'
 
 export class TaxonomyEngine {
@@ -142,12 +143,12 @@ export class TaxonomyEngine {
       adaptations.push('Chăm sóc và nuôi dưỡng con non chuyên sâu')
     }
 
-    // 6. Organism Domain (Thực vật, Động vật, Nấm, Vi sinh) & Food Chain Trophic Role
+    // 6. Organism Domain (Thực vật, Động vật, Nấm, Vi sinh) & Food Chain Trophic Role (6 cấp độ chuỗi thức ăn)
     let domain: OrganismDomain = 'microbe'
     let domainLabel = 'Vi sinh vật'
     let domainIcon = '🦠'
     let trophicRole: TrophicRole = 'producer'
-    let trophicRoleLabel = 'Sinh vật sản xuất'
+    let trophicRoleLabel = 'Sinh vật sản xuất (Bậc 1)'
     let trophicLevel = 1
     let dietDescription = 'Hấp thụ khoáng chất và năng lượng sao'
 
@@ -157,14 +158,14 @@ export class TaxonomyEngine {
       domainIcon = '🦠'
       if (trophicMode === 'autotroph' || trophicMode === 'chemotroph') {
         trophicRole = 'producer'
-        trophicRoleLabel = 'Sinh vật sản xuất (Tự dưỡng nhân sơ)'
+        trophicRoleLabel = 'Sinh vật sản xuất (Tảo đơn bào / Vi khuẩn lam quang hợp)'
         trophicLevel = 1
-        dietDescription = 'Quang hợp & hóa năng sơ khai, phân đôi sinh khối quy mô khổng lồ'
+        dietDescription = 'Quang hợp & hóa năng sơ khai, mở đầu chuỗi thức ăn sinh quyển'
       } else {
         trophicRole = 'decomposer'
-        trophicRoleLabel = 'Vi sinh vật phân giải (Hoại sinh nhân sơ)'
+        trophicRoleLabel = 'Sinh vật phân giải (Vi khuẩn hoại sinh nhân sơ)'
         trophicLevel = 1
-        dietDescription = 'Phân giải khoáng & hữu cơ, tạo nền tảng đất cho thực vật'
+        dietDescription = 'Phân hủy xác hữu cơ và chất thải thành chất vô cơ cho thực vật/tảo tái hấp thụ'
       }
     } else if (tier === 'eukaryote') {
       domain = 'microbe'
@@ -172,14 +173,19 @@ export class TaxonomyEngine {
       domainIcon = '🧫'
       if (trophicMode === 'autotroph' || trophicMode === 'chemotroph') {
         trophicRole = 'producer'
-        trophicRoleLabel = 'Tảo đơn bào nhân thực (Có lục lạp)'
+        trophicRoleLabel = 'Sinh vật sản xuất (Tảo đơn bào lục, silic, giáp)'
         trophicLevel = 1
-        dietDescription = 'Quang hợp nhờ lục lạp nội cộng sinh, hô hấp ti thể'
+        dietDescription = 'Quang hợp nhờ lục lạp nội cộng sinh, mở đầu chuỗi thức ăn'
+      } else if (expressed.mobility >= 0.2) {
+        trophicRole = 'herbivore'
+        trophicRoleLabel = 'Sinh vật tiêu thụ bậc 1 (Động vật nguyên sinh ăn tảo)'
+        trophicLevel = 2
+        dietDescription = 'Trùng giày, trùng roi dị dưỡng ăn tảo đơn bào và vi khuẩn lam'
       } else {
         trophicRole = 'decomposer'
-        trophicRoleLabel = 'Nguyên sinh vật dị dưỡng (Thực bào)'
+        trophicRoleLabel = 'Sinh vật phân giải (Nguyên sinh vật hoại sinh)'
         trophicLevel = 1
-        dietDescription = 'Thực bào vi khuẩn nhỏ và hấp thu chất hữu cơ hòa tan'
+        dietDescription = 'Thực bào mùn bã và phân giải chất hữu cơ trả lại khoáng chất vô cơ'
       }
     } else if (tier === 'simple_multicellular') {
       // Giai đoạn 3: Đa bào đơn giản / Tập đoàn tế bào (Tuyệt đối CHƯA THỂ là động vật fauna!)
@@ -188,7 +194,7 @@ export class TaxonomyEngine {
         domainLabel = 'Thực vật (Tảo tập đoàn)'
         domainIcon = '🌿'
         trophicRole = 'producer'
-        trophicRoleLabel = 'Sinh vật sản xuất (Tảo màng)'
+        trophicRoleLabel = 'Sinh vật sản xuất (Tảo màng đa bào)'
         trophicLevel = 1
         dietDescription = 'Tập đoàn tế bào quang hợp năng lượng sao và trao đổi khoáng'
       } else if (trophicMode === 'heterotroph' && expressed.mobility <= 0.22) {
@@ -196,17 +202,17 @@ export class TaxonomyEngine {
         domainLabel = 'Nấm & Phân giải'
         domainIcon = '🍄'
         trophicRole = 'decomposer'
-        trophicRoleLabel = 'Sinh vật phân giải'
-        trophicLevel = 2
+        trophicRoleLabel = 'Sinh vật phân giải (Nấm sợi sơ khai)'
+        trophicLevel = 1
         dietDescription = 'Khối tế bào hợp tác phân hủy chất hữu cơ'
       } else {
         domain = 'microbe'
         domainLabel = 'Tập đoàn nguyên sinh vật'
         domainIcon = '🧫'
-        trophicRole = 'decomposer'
-        trophicRoleLabel = 'Tập đoàn dị dưỡng sơ khai'
-        trophicLevel = 1
-        dietDescription = 'Hợp tác lọc hạt hữu cơ và mùn vi sinh'
+        trophicRole = 'herbivore'
+        trophicRoleLabel = 'Sinh vật tiêu thụ bậc 1 (Tập đoàn dị dưỡng lọc tảo)'
+        trophicLevel = 2
+        dietDescription = 'Hợp tác lọc hạt hữu cơ và tảo vi sinh'
       }
     } else if (tier === 'differentiated_tissue') {
       // Giai đoạn 4: Phân hóa tế bào và mô sơ khai (Biểu mô, mầm sinh sản, mô vận động)
@@ -223,18 +229,18 @@ export class TaxonomyEngine {
         domainLabel = 'Nấm & Phân giải'
         domainIcon = '🍄'
         trophicRole = 'decomposer'
-        trophicRoleLabel = 'Sinh vật phân giải'
-        trophicLevel = 2
+        trophicRoleLabel = 'Sinh vật phân giải (Nấm phân hóa mô)'
+        trophicLevel = 1
         dietDescription = 'Sợi khuẩn ty phân hóa tiết enzym tiêu hóa ngoại bào'
       } else {
         // Tiền thân động vật phân hóa mô (Stem Metazoa / Placozoa)
         domain = 'microbe'
         domainLabel = 'Thể đa bào phân hóa mô'
         domainIcon = '🧫'
-        trophicRole = 'decomposer'
-        trophicRoleLabel = 'Sinh vật biểu mô hấp thu'
-        trophicLevel = 1
-        dietDescription = 'Lớp tế bào bụng tiêu hóa bề mặt thảm vi sinh và mùn hữu cơ'
+        trophicRole = 'herbivore'
+        trophicRoleLabel = 'Sinh vật tiêu thụ bậc 1 (Mô biểu mô hấp thu tảo)'
+        trophicLevel = 2
+        dietDescription = 'Lớp tế bào bụng tiêu hóa bề mặt thảm vi sinh và tảo phù du'
       }
     } else if (tier === 'primitive_animal') {
       // Giai đoạn 5: ĐÂY MỚI LÀ LẦN ĐẦU TIÊN CỦA GIỚI ĐỘNG VẬT (fauna)!
@@ -256,24 +262,23 @@ export class TaxonomyEngine {
         domainIcon = '🪸' // Bọt biển / Ruột khoang tỏa tròn
         if (expressed.metabolicRate >= 1.25 && expressed.mobility >= 0.45) {
           trophicRole = 'carnivore'
-          trophicRoleLabel = 'Động vật ruột khoang bắt mồi'
+          trophicRoleLabel = 'Sinh vật tiêu thụ bậc 2 (Động vật ruột khoang bắt mồi)'
           trophicLevel = 3
-          dietDescription = 'Xúc tu tế bào gai bắt và làm tê liệt các sinh vật nhỏ'
+          dietDescription = 'Xúc tu tế bào gai bắt và làm tê liệt các sinh vật tiêu thụ bậc 1'
         } else if (expressed.mobility >= 0.3) {
           trophicRole = 'omnivore'
-          trophicRoleLabel = 'Động vật tỏa tròn ăn tạp'
+          trophicRoleLabel = 'Động vật tỏa tròn ăn tạp (Bậc 2)'
           trophicLevel = 2
           dietDescription = 'Bắt giữ linh hoạt vi sinh vật phù du và hạt hữu cơ'
         } else {
           trophicRole = 'herbivore'
-          trophicRoleLabel = 'Động vật bọt biển lọc thức ăn'
+          trophicRoleLabel = 'Sinh vật tiêu thụ bậc 1 (Bọt biển lọc tảo)'
           trophicLevel = 2
           dietDescription = 'Hệ thống lỗ hút lọc tảo và thảm thực vật phù du'
         }
       }
-    } else {
-      // Giai đoạn 6+: complex_bilaterian, advanced, sapient
-      // Động vật đối xứng hai bên và động vật bậc cao / thông minh
+    } else if (tier === 'complex_bilaterian' || tier === 'complex_multicellular') {
+      // Giai đoạn 6: Động vật đối xứng 2 bên (Bilateria: Cá nhỏ, Giáp xác, Nòng nọc, Côn trùng)
       if (
         (trophicMode === 'autotroph' || trophicMode === 'chemotroph') &&
         expressed.mobility <= 0.35
@@ -295,29 +300,91 @@ export class TaxonomyEngine {
         domainIcon = '🍄'
         trophicRole = 'decomposer'
         trophicRoleLabel = 'Sinh vật phân giải'
-        trophicLevel = 2
-        dietDescription = 'Phân hủy sinh khối chết, tái sinh khoáng chất'
+        trophicLevel = 1
+        dietDescription = 'Phân hủy sinh khối chết, tái sinh khoáng chất vô cơ'
       } else {
         domain = 'fauna'
         domainLabel = 'Động vật'
         domainIcon = '🐾'
         if (expressed.metabolicRate >= 1.25 && expressed.mobility >= 0.5) {
           trophicRole = 'carnivore'
-          trophicRoleLabel = 'Động vật ăn thịt (Săn mồi)'
+          trophicRoleLabel = 'Sinh vật tiêu thụ bậc 2 (Cá nhỏ / Côn trùng săn mồi)'
           trophicLevel = 3
-          dietDescription = 'Săn bắt động vật ăn thực vật và con mồi trong vùng'
+          dietDescription = 'Săn giáp xác nhỏ, bọ nước Daphnia, nòng nọc và ấu trùng thủy sinh bậc 2'
         } else if (expressed.mobility >= 0.35 && expressed.radiationResistance >= 0.45) {
           trophicRole = 'omnivore'
-          trophicRoleLabel = 'Động vật ăn tạp'
+          trophicRoleLabel = 'Động vật ăn tạp đối xứng hai bên (Bậc 2)'
           trophicLevel = 2
-          dietDescription = 'Tiêu thụ linh hoạt thảm thực vật và con mồi nhỏ'
+          dietDescription = 'Tiêu thụ linh hoạt thảm thực vật, tảo và con mồi giáp xác nhỏ'
         } else {
           trophicRole = 'herbivore'
-          trophicRoleLabel = 'Động vật ăn thực vật'
+          trophicRoleLabel = 'Sinh vật tiêu thụ bậc 1 (Giáp xác / Bọ nước / Động vật ăn cỏ)'
           trophicLevel = 2
-          dietDescription = 'Tiêu thụ thảm thực vật và tảo sinh khối'
+          dietDescription = 'Chuyển hóa năng lượng từ tảo đơn bào và thực vật thành sinh khối động vật'
         }
       }
+    } else if (tier === 'advanced') {
+      // Giai đoạn 7: Động vật bậc cao (Cá lớn, Chim săn mồi, Bò sát, Động vật có vú)
+      if (
+        (trophicMode === 'autotroph' || trophicMode === 'chemotroph') &&
+        expressed.mobility <= 0.35
+      ) {
+        domain = 'flora'
+        domainLabel = 'Thực vật'
+        domainIcon = '🌿'
+        trophicRole = 'producer'
+        trophicRoleLabel = 'Sinh vật sản xuất (Thực vật bậc cao)'
+        trophicLevel = 1
+        dietDescription = 'Hấp thụ ánh sáng mặt trời, nước và CO2 tổng hợp sinh khối lớn'
+      } else if (
+        expressed.mobility <= 0.18 &&
+        trophicMode === 'heterotroph'
+      ) {
+        domain = 'fungi'
+        domainLabel = 'Nấm & Phân giải'
+        domainIcon = '🍄'
+        trophicRole = 'decomposer'
+        trophicRoleLabel = 'Sinh vật phân giải'
+        trophicLevel = 1
+        dietDescription = 'Phân hủy xác sinh khối động thực vật thành chất vô cơ'
+      } else {
+        domain = 'fauna'
+        domainLabel = 'Động vật'
+        domainIcon = '🐾'
+        if (expressed.metabolicRate >= 1.25 && expressed.mobility >= 0.5) {
+          // Phân biệt Động vật có vú đỉnh chuỗi (Bậc 5) vs Động vật săn mồi bậc 3 (Cá lớn, chim, bò sát - Bậc 4)
+          if (expressed.metabolicRate >= 1.35 || expressed.clutchSize <= 3) {
+            trophicRole = 'carnivore'
+            trophicRoleLabel = 'Động vật có vú ăn thịt đầu bảng (Bậc 5 - Apex Mammals)'
+            trophicLevel = 5
+            dietDescription = 'Đỉnh chuỗi thức ăn: Săn cá lớn, hải cẩu, thú ăn cỏ và động vật móng guốc'
+          } else {
+            trophicRole = 'carnivore'
+            trophicRoleLabel = 'Sinh vật tiêu thụ bậc 3 (Cá lớn / Chim săn mồi / Bò sát)'
+            trophicLevel = 4
+            dietDescription = 'Kiểm soát số lượng cá nhỏ, ếch nhái và động vật tiêu thụ bậc 2'
+          }
+        } else if (expressed.mobility >= 0.35 && expressed.radiationResistance >= 0.45) {
+          trophicRole = 'omnivore'
+          trophicRoleLabel = 'Động vật có vú ăn tạp đầu bảng (Bậc 5)'
+          trophicLevel = 5
+          dietDescription = 'Tiêu thụ linh hoạt cá lớn, sinh vật biển, quả hạt và thảm thực vật'
+        } else {
+          trophicRole = 'herbivore'
+          trophicRoleLabel = 'Sinh vật tiêu thụ bậc 1 (Động vật có vú ăn thực vật)'
+          trophicLevel = 2
+          dietDescription = 'Tiêu thụ khối lượng lớn thảm thực vật, tích lũy sinh khối động vật'
+        }
+      }
+    } else {
+      // Giai đoạn 8: sapient (Sinh vật trí tuệ đỉnh chuỗi thức ăn)
+      domain = 'fauna'
+      domainLabel = 'Sinh vật trí tuệ'
+      domainIcon = '🧠'
+      trophicRole = expressed.metabolicRate >= 1.25 ? 'carnivore' : 'omnivore'
+      trophicRoleLabel = 'Sinh vật trí tuệ đỉnh chuỗi thức ăn (Bậc 5 - Apex Sapient)'
+      trophicLevel = 5
+      dietDescription = 'Làm chủ chuỗi năng lượng sinh quyển, quản lý và tiêu thụ tài nguyên đỉnh chuỗi'
     }
 
     // Adaptive genomic heritage for Flora and Microorganisms
@@ -641,6 +708,16 @@ export class TaxonomyEngine {
         break
     }
 
+    const taxonomicHierarchy = TaxonomyEngine.generateTaxonomicHierarchy(
+      tier,
+      domain,
+      planetaryLineage,
+      sapientArchetype,
+      trophicRole,
+      scientificName,
+      trophicLevel
+    )
+
     return {
       tier,
       tierLabel,
@@ -665,6 +742,246 @@ export class TaxonomyEngine {
       sapientLabel,
       notableAdaptations: adaptations,
       complexityIndex,
+      taxonomicHierarchy,
+    }
+  }
+
+  /**
+   * Generates authentic 7-level Linnaean taxonomic hierarchy
+   * (Giới / Kingdom -> Ngành / Phylum -> Lớp / Class -> Bộ / Order -> Họ / Family -> Chi / Genus -> Loài / Species)
+   */
+  static generateTaxonomicHierarchy(
+    tier: EvolutionTier,
+    domain: OrganismDomain,
+    planetaryLineage: PlanetaryLineage,
+    sapientArchetype: SapientArchetype | undefined,
+    trophicRole: TrophicRole,
+    scientificName: string,
+    trophicLevel: number
+  ): TaxonomicHierarchy {
+    // 1. Humanoid Sapient (Con người hiện đại: Homo sapiens)
+    if (sapientArchetype === 'humanoid' || (tier === 'sapient' && planetaryLineage === 'terran_carbon')) {
+      return {
+        domainRank: 'Eukaryota (Sinh vật nhân thực)',
+        kingdom: 'Animalia (Giới Động vật)',
+        phylum: 'Chordata (Ngành Có dây sống / Cột sống)',
+        classRank: 'Mammalia (Lớp Động vật có vú / Lớp Thú)',
+        orderRank: 'Primates (Bộ Linh trưởng)',
+        familyRank: 'Hominidae (Họ Người)',
+        genusRank: 'Homo (Chi Người)',
+        speciesRank: scientificName || 'Homo sapiens (Con người hiện đại)',
+      }
+    }
+
+    // 2. Extraterrestrial Sapient Lineages
+    if (tier === 'sapient') {
+      if (sapientArchetype === 'aquatic_cephalopod') {
+        return {
+          domainRank: 'Eukaryota (Nhân thực thủy quyển)',
+          kingdom: 'Animalia (Động vật)',
+          phylum: 'Mollusca (Ngành Thân mềm)',
+          classRank: 'Cephalopoda (Lớp Chân đầu trí tuệ)',
+          orderRank: 'Octopoda (Bộ Bạch tuộc phát quang)',
+          familyRank: 'Bathycephalidae (Họ Thủy tộc vực sâu)',
+          genusRank: 'Cephalopoda',
+          speciesRank: scientificName,
+        }
+      }
+      if (sapientArchetype === 'silicon_crystalline') {
+        return {
+          domainRank: 'Lithobiota (Sinh giới khoáng silic)',
+          kingdom: 'Crystallia (Giới Tinh thể sinh học)',
+          phylum: 'Piezochorda (Ngành Dây áp điện)',
+          classRank: 'Silicoclasia (Lớp Tinh thể bán dẫn)',
+          orderRank: 'Lithosapientia (Bộ Trí tuệ thạch anh)',
+          familyRank: 'Pyrosilicidae (Họ Tinh thể nham thạch)',
+          genusRank: 'Lithosapiens',
+          speciesRank: scientificName,
+        }
+      }
+      if (sapientArchetype === 'aerial_avian') {
+        return {
+          domainRank: 'Eukaryota (Nhân thực khí quyển)',
+          kingdom: 'Animalia (Động vật)',
+          phylum: 'Chordata (Có dây sống)',
+          classRank: 'Aves (Lớp Chim / Dực tộc)',
+          orderRank: 'Aero-Primates (Bộ Linh trưởng bay lượn)',
+          familyRank: 'Aeroavidae (Họ Dực nhân tầng không)',
+          genusRank: 'Aeroavis',
+          speciesRank: scientificName,
+        }
+      }
+      if (sapientArchetype === 'cryo_titan') {
+        return {
+          domainRank: 'Cryobiota (Sinh giới siêu hàn)',
+          kingdom: 'Animalia (Động vật)',
+          phylum: 'Chordata (Có dây sống)',
+          classRank: 'Mammalia (Lớp Thú hàn đới khổng lồ)',
+          orderRank: 'Cryotheria (Bộ Cự thú băng vĩnh cửu)',
+          familyRank: 'Glaciatitanidae (Họ Băng khổng lồ)',
+          genusRank: 'Glaciatitan',
+          speciesRank: scientificName,
+        }
+      }
+    }
+
+    // 3. Stage 7: Advanced Organisms (Mammals, Apex Carnivores, Avian, Flora)
+    if (tier === 'advanced') {
+      if (domain === 'flora') {
+        return {
+          domainRank: 'Eukaryota (Sinh vật nhân thực)',
+          kingdom: 'Plantae (Giới Thực vật)',
+          phylum: 'Tracheophyta (Ngành Thực vật có mạch)',
+          classRank: 'Magnoliopsida (Lớp Thực vật hạt kín / Đại mộc)',
+          orderRank: 'Fagales (Bộ Dẻ / Rừng đại ngàn)',
+          familyRank: 'Fagaceae (Họ Cây thân gỗ)',
+          genusRank: 'Silvamagna',
+          speciesRank: scientificName,
+        }
+      }
+      // Fauna: Mammalia or Higher Chordates
+      if (trophicLevel >= 5 || trophicRole === 'carnivore' || trophicRole === 'omnivore') {
+        return {
+          domainRank: 'Eukaryota (Sinh vật nhân thực)',
+          kingdom: 'Animalia (Giới Động vật)',
+          phylum: 'Chordata (Ngành Có dây sống / Động vật có xương sống)',
+          classRank: 'Mammalia (Lớp Động vật có vú / Lớp Thú)',
+          orderRank: trophicRole === 'carnivore' ? 'Carnivora (Bộ Ăn thịt)' : 'Cetartiodactyla (Bộ Móng guốc / Thú biển)',
+          familyRank: trophicRole === 'carnivore' ? 'Felidae / Ursidae (Họ Mèo lớn / Họ Gấu)' : 'Bovidae / Delphinidae (Họ Móng guốc / Cá voi)',
+          genusRank: 'Theriosaurus',
+          speciesRank: scientificName,
+        }
+      }
+      return {
+        domainRank: 'Eukaryota (Sinh vật nhân thực)',
+        kingdom: 'Animalia (Giới Động vật)',
+        phylum: 'Chordata (Ngành Có dây sống)',
+        classRank: 'Mammalia (Lớp Động vật có vú ăn thực vật)',
+        orderRank: 'Artiodactyla (Bộ Móng guốc chẵn)',
+        familyRank: 'Bovidae (Họ Trâu bò / Thú gặm cỏ)',
+        genusRank: 'Herbitherium',
+        speciesRank: scientificName,
+      }
+    }
+
+    // 4. Stage 6: Complex Bilaterians (Bilateria: Cá nhỏ, Giáp xác, Bọ nước Daphnia, Côn trùng)
+    if (tier === 'complex_bilaterian' || tier === 'complex_multicellular') {
+      if (domain === 'flora') {
+        return {
+          domainRank: 'Eukaryota (Sinh vật nhân thực)',
+          kingdom: 'Plantae (Giới Thực vật)',
+          phylum: 'Pteridophyta (Ngành Dương xỉ / Quyết có mạch)',
+          classRank: 'Polypodiopsida',
+          orderRank: 'Polypodiales',
+          familyRank: 'Polypodiaceae',
+          genusRank: 'Flora',
+          speciesRank: scientificName,
+        }
+      }
+      if (trophicRole === 'herbivore') {
+        return {
+          domainRank: 'Eukaryota (Sinh vật nhân thực)',
+          kingdom: 'Animalia (Giới Động vật)',
+          phylum: 'Arthropoda (Ngành Chân khớp / Giáp xác)',
+          classRank: 'Branchiopoda (Lớp Mang chân / Bọ nước)',
+          orderRank: 'Cladocera (Bộ Râu ngành)',
+          familyRank: 'Daphniidae (Họ Bọ nước Daphnia)',
+          genusRank: 'Daphnia',
+          speciesRank: scientificName,
+        }
+      }
+      return {
+        domainRank: 'Eukaryota (Sinh vật nhân thực)',
+        kingdom: 'Animalia (Giới Động vật)',
+        phylum: 'Chordata (Ngành Có dây sống)',
+        classRank: 'Actinopterygii (Lớp Cá vây tia / Cá nhỏ)',
+        orderRank: 'Clupeiformes (Bộ Cá trích / Cá cơm)',
+        familyRank: 'Engraulidae (Họ Cá cơm)',
+        genusRank: 'Bilateria',
+        speciesRank: scientificName,
+      }
+    }
+
+    // 5. Stage 5: Primitive Animals (Bọt biển / Porifera, Ruột khoang / Cnidaria)
+    if (tier === 'primitive_animal') {
+      if (domain === 'flora') {
+        return {
+          domainRank: 'Eukaryota (Sinh vật nhân thực)',
+          kingdom: 'Plantae (Giới Thực vật)',
+          phylum: 'Chlorophyta (Ngành Tảo lục đa bào)',
+          classRank: 'Chlorophyceae',
+          orderRank: 'Volvocales',
+          familyRank: 'Volvocaceae',
+          genusRank: 'Alga',
+          speciesRank: scientificName,
+        }
+      }
+      const isPorifera = trophicRole === 'herbivore'
+      return {
+        domainRank: 'Eukaryota (Sinh vật nhân thực)',
+        kingdom: 'Animalia (Giới Động vật)',
+        phylum: isPorifera ? 'Porifera (Ngành Thân lỗ / Bọt biển)' : 'Cnidaria (Ngành Ruột khoang / Sứa, San hô)',
+        classRank: isPorifera ? 'Demospongiae (Lớp Bọt biển thông thường)' : 'Scyphozoa (Lớp Sứa đối xứng tỏa tròn)',
+        orderRank: isPorifera ? 'Dictyoceratida' : 'Semaeostomeae',
+        familyRank: isPorifera ? 'Spongiidae' : 'Cyaneidae',
+        genusRank: isPorifera ? 'Porifera' : 'Cnidaria',
+        speciesRank: scientificName,
+      }
+    }
+
+    // 6. Stage 4: Differentiated Tissue
+    if (tier === 'differentiated_tissue') {
+      return {
+        domainRank: 'Eukaryota (Sinh vật nhân thực)',
+        kingdom: domain === 'flora' ? 'Plantae (Giới Thực vật)' : domain === 'fungi' ? 'Fungi (Giới Nấm)' : 'Protista (Nguyên sinh)',
+        phylum: domain === 'flora' ? 'Bryophyta (Ngành Rêu mô sơ khai)' : 'Placozoa (Đa bào dạng tấm)',
+        classRank: 'Bryopsida',
+        orderRank: 'Bryales',
+        familyRank: 'Bryaceae',
+        genusRank: 'Thallus',
+        speciesRank: scientificName,
+      }
+    }
+
+    // 7. Stage 3: Simple Multicellular (Tập đoàn đa bào / Tảo sợi)
+    if (tier === 'simple_multicellular') {
+      return {
+        domainRank: 'Eukaryota (Sinh vật nhân thực)',
+        kingdom: domain === 'fungi' ? 'Fungi (Giới Nấm)' : 'Plantae (Giới Thực vật)',
+        phylum: 'Chlorophyta (Ngành Tảo lục)',
+        classRank: 'Ulvophyceae (Lớp Tảo màng)',
+        orderRank: 'Ulvales',
+        familyRank: 'Ulvaceae',
+        genusRank: 'Alga',
+        speciesRank: scientificName,
+      }
+    }
+
+    // 8. Stage 2: Eukaryotes (Nguyên sinh vật nhân thực: Trùng giày, Trùng roi, Tảo đơn bào)
+    if (tier === 'eukaryote') {
+      const isProtozoan = trophicRole === 'herbivore'
+      return {
+        domainRank: 'Eukaryota (Sinh vật nhân thực)',
+        kingdom: 'Protista (Giới Nguyên sinh vật)',
+        phylum: isProtozoan ? 'Ciliophora (Ngành Trùng lông / Trùng giày)' : 'Chlorophyta (Ngành Tảo lục đơn bào)',
+        classRank: isProtozoan ? 'Ciliatea' : 'Chlorophyceae',
+        orderRank: isProtozoan ? 'Peniculida' : 'Chlamydomonadales',
+        familyRank: isProtozoan ? 'Parameciidae (Họ Trùng giày)' : 'Chlamydomonadaceae',
+        genusRank: isProtozoan ? 'Paramecium' : 'Chlamydomonas',
+        speciesRank: scientificName,
+      }
+    }
+
+    // 9. Stage 1: Prokaryotes (Tế bào nhân sơ: Vi khuẩn lam, Vi khuẩn hóa dưỡng)
+    return {
+      domainRank: 'Prokaryota (Sinh vật nhân sơ)',
+      kingdom: 'Monera (Giới Khởi sinh / Bacteria)',
+      phylum: 'Cyanobacteria (Ngành Vi khuẩn lam quang hợp)',
+      classRank: 'Cyanophyceae',
+      orderRank: 'Chroococcales',
+      familyRank: 'Chroococcaceae',
+      genusRank: 'Prokaryota',
+      speciesRank: scientificName,
     }
   }
 

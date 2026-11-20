@@ -36,6 +36,7 @@ export interface BiologicalStateSnapshot {
   readonly biomeCells: SimulationSnapshot['biomeCells']
   readonly activeDisasters: SimulationSnapshot['activeDisasters']
   readonly perturbations: SimulationSnapshot['perturbations']
+  readonly autoDisastersEnabled?: boolean
   readonly prebioticState: SimulationSnapshot['prebioticState']
   readonly biogeochemical: SimulationSnapshot['biogeochemical']
   readonly speciationEvents?: readonly SpeciationEvent[]
@@ -137,6 +138,7 @@ export class SimulationClock {
       biomeCells: bioState.biomeCells,
       activeDisasters: bioState.activeDisasters,
       perturbations: bioState.perturbations,
+      autoDisastersEnabled: bioState.autoDisastersEnabled ?? true,
       prebioticState: bioState.prebioticState,
       biogeochemical: bioState.biogeochemical,
       speciationEvents: bioState.speciationEvents ?? [],

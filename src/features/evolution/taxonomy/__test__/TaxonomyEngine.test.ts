@@ -238,4 +238,68 @@ describe('TaxonomyEngine - Authentic 6-Stage Biological Evolution Pathway', () =
       }
     }
   })
+
+  it('generates authentic Linnaean taxonomic hierarchy from Animalia to Homo sapiens', () => {
+    // 1. Humanoid Sapient hierarchy
+    const humanHierarchy = TaxonomyEngine.generateTaxonomicHierarchy(
+      'sapient',
+      'fauna',
+      'terran_carbon',
+      'humanoid',
+      'omnivore',
+      'Homo sapiens',
+      5
+    )
+    expect(humanHierarchy.kingdom).toContain('Animalia')
+    expect(humanHierarchy.phylum).toContain('Chordata')
+    expect(humanHierarchy.classRank).toContain('Mammalia')
+    expect(humanHierarchy.orderRank).toContain('Primates')
+    expect(humanHierarchy.familyRank).toContain('Hominidae')
+    expect(humanHierarchy.genusRank).toBe('Homo (Chi Người)')
+    expect(humanHierarchy.speciesRank).toContain('Homo sapiens')
+
+    // 2. Advanced Mammal hierarchy
+    const mammalHierarchy = TaxonomyEngine.generateTaxonomicHierarchy(
+      'advanced',
+      'fauna',
+      'terran_carbon',
+      undefined,
+      'carnivore',
+      'Theriosaurus venator',
+      5
+    )
+    expect(mammalHierarchy.kingdom).toContain('Animalia')
+    expect(mammalHierarchy.phylum).toContain('Chordata')
+    expect(mammalHierarchy.classRank).toContain('Mammalia')
+    expect(mammalHierarchy.orderRank).toContain('Carnivora')
+
+    // 3. Bilaterian Branchiopod / Daphnia hierarchy
+    const daphniaHierarchy = TaxonomyEngine.generateTaxonomicHierarchy(
+      'complex_bilaterian',
+      'fauna',
+      'terran_carbon',
+      undefined,
+      'herbivore',
+      'Daphnia magna',
+      2
+    )
+    expect(daphniaHierarchy.kingdom).toContain('Animalia')
+    expect(daphniaHierarchy.phylum).toContain('Arthropoda')
+    expect(daphniaHierarchy.classRank).toContain('Branchiopoda')
+    expect(daphniaHierarchy.familyRank).toContain('Daphniidae')
+
+    // 4. Primordial Prokaryote hierarchy
+    const proHierarchy = TaxonomyEngine.generateTaxonomicHierarchy(
+      'prokaryote',
+      'microbe',
+      'terran_carbon',
+      undefined,
+      'producer',
+      'Cyanobacteria gen1',
+      1
+    )
+    expect(proHierarchy.domainRank).toContain('Prokaryota')
+    expect(proHierarchy.kingdom).toContain('Monera')
+    expect(proHierarchy.phylum).toContain('Cyanobacteria')
+  })
 })

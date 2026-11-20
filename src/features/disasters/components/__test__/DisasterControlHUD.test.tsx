@@ -67,5 +67,27 @@ describe('DisasterControlHUD', () => {
     expect(screen.getByText('ΔT: -22°C')).toBeInTheDocument()
     expect(screen.getByText('Dust: 15%')).toBeInTheDocument()
   })
+
+  it('renders auto-disasters toggle and triggers onToggleAutoDisasters callback', () => {
+    const handleToggle = vi.fn()
+    render(
+      <DisasterControlHUD
+        activeDisasters={[]}
+        perturbations={DEFAULT_PERTURBATIONS}
+        onTriggerDisaster={vi.fn()}
+        autoDisastersEnabled={true}
+        onToggleAutoDisasters={handleToggle}
+      />
+    )
+
+    // Expand drawer
+    fireEvent.click(screen.getByText('Unleash Cataclysm'))
+    expect(screen.getByText('Thiên tai tự nhiên')).toBeInTheDocument()
+    expect(screen.getByTestId('toggle-auto-disasters')).toHaveTextContent('● Đang BẬT')
+
+    // Click toggle
+    fireEvent.click(screen.getByTestId('toggle-auto-disasters'))
+    expect(handleToggle).toHaveBeenCalledWith(false)
+  })
 })
 

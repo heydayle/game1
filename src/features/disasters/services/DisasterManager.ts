@@ -5,12 +5,109 @@ import {
   type EnvironmentalPerturbations,
 } from '../types.js'
 import { DEFAULT_PERTURBATIONS, DISASTER_CATALOG } from '../constants.js'
+import type { PlanetConfig } from '../../genesis/types/genesis.js'
 
 export class DisasterManager {
   private activeDisasters: ActiveDisaster[] = []
   private nextDisasterId = 1
   private currentPerturbations: EnvironmentalPerturbations = { ...DEFAULT_PERTURBATIONS }
   private lastPulseRotation = -1
+  private autoDisastersEnabled = true
+  private minPeaceRotations = 30
+  private baseDisasterChance = 0.02
+  private lastDisasterEndRotation = 0
+
+  /**
+   * Sets whether random spontaneous natural disasters are enabled.
+   */
+  setAutoDisastersEnabled(enabled: boolean): void {
+    this.autoDisastersEnabled = enabled
+  }
+
+  /**
+   * Checks if random spontaneous natural disasters are enabled.
+   */
+  isAutoDisastersEnabled(): boolean {
+    return this.autoDisastersEnabled
+  }
+
+  /**
+   * Configures stochastic natural disaster cadence intervals.
+   */
+  setDisasterIntervalConfig(minPeaceRotations: number, baseChance: number): void {
+    this.minPeaceRotations = Math.max(1, minPeaceRotations)
+    this.baseDisasterChance = Math.max(0.001, Math.min(1.0, baseChance))
+  }
+
+  /**
+   * Selects a disaster type weighted by planetary environmental conditions or uniformly.
+   */
+  private selectDisasterType(
+    rng?: { next(): number } | null,
+    planetConfig?: PlanetConfig | null
+  ): DisasterType {
+    const types: DisasterType[] = [
+      'asteroid_impact',
+      'ice_age',
+      'volcanic_eruption',
+      'climate_shift',
+      'solar_flare',
+    ]
+
+    const weights: Record<DisasterType, number> = {
+      asteroid_impact: 1.0,
+      ice_age: 1.0,
+      volcanic_eruption: 1.0,
+      climate_shift: 1.0,
+      solar_flare: 1.0,
+    }
+
+    if (planetConfig) {
+      if (planetConfig.surfaceTemperatureCelsius < 0) {
+        weights.ice_age += 2.5
+      } else if (planetConfig.surfaceTemperatureCelsius > 35) {
+        weights.climate_shift += 2.0
+        weights.volcanic_eruption += 1.5
+      }
+
+      if (
+        planetConfig.environmentalConditions?.radiationLevel === 'intense' ||
+        planetConfig.environmentalConditions?.radiationLevel === 'extreme'
+      ) {
+        weights.solar_flare += 2.5
+      }
+
+      if (
+        planetConfig.environmentalConditions?.tectonicStability === 'active' ||
+        planetConfig.environmentalConditions?.tectonicStability === 'cataclysmic'
+      ) {
+        weights.volcanic_eruption += 2.5
+      }
+
+      if (
+        planetConfig.atmosphericComposition &&
+        planetConfig.atmosphericComposition.pressureAtm < 0.7
+      ) {
+        weights.asteroid_impact += 2.0
+      }
+    }
+
+    let totalWeight = 0
+    for (const t of types) {
+      totalWeight += weights[t]
+    }
+
+    const roll = (rng ? rng.next() : Math.random()) * totalWeight
+    let cumulative = 0
+    for (const t of types) {
+      cumulative += weights[t]
+      if (roll <= cumulative) {
+        return t
+      }
+    }
+
+    return types[Math.floor((rng ? rng.next() : Math.random()) * types.length)]!
+  }
 
   /**
    * Triggers a new planetary disaster event.
@@ -39,6 +136,7 @@ export class DisasterManager {
 
     this.activeDisasters.push(disaster)
     this.lastPulseRotation = currentRotation
+    this.lastDisasterEndRotation = currentRotation + duration
     this.recalculatePerturbations(currentRotation)
     return disaster
   }
@@ -46,14 +144,42 @@ export class DisasterManager {
   /**
    * Advances active disasters by one rotation.
    * Decrements remaining duration, removes expired disasters, and updates environmental perturbations.
+   * Stochastically triggers spontaneous natural disasters if auto-disasters are enabled.
    */
-  step(currentRotation: number): EnvironmentalPerturbations {
+  step(
+    currentRotation: number,
+    rng?: { next(): number } | null,
+    planetConfig?: PlanetConfig | null
+  ): EnvironmentalPerturbations {
     for (const disaster of this.activeDisasters) {
       disaster.remainingRotations = Math.max(0, disaster.remainingRotations - 1)
     }
 
     // Filter out expired events
     this.activeDisasters = this.activeDisasters.filter((d) => d.remainingRotations > 0)
+
+    if (this.activeDisasters.length > 0) {
+      this.lastDisasterEndRotation = currentRotation
+    } else if (this.autoDisastersEnabled) {
+      // Natural spontaneous disaster generation:
+      // Allow life to take root first (currentRotation >= 25)
+      // Then check if peaceful interval between disasters has elapsed
+      const peacePeriod = currentRotation - this.lastDisasterEndRotation
+      if (currentRotation >= 25 && peacePeriod >= this.minPeaceRotations) {
+        const extraHazard = Math.min(0.06, (peacePeriod - this.minPeaceRotations) * 0.001)
+        const disasterChance = this.baseDisasterChance + extraHazard
+        const roll = rng ? rng.next() : Math.random()
+
+        if (roll < disasterChance) {
+          const chosenType = this.selectDisasterType(rng, planetConfig)
+          const sevRoll = rng ? rng.next() : Math.random()
+          const severity = Number((0.35 + sevRoll * 0.5).toFixed(2))
+          const epicenterCellId = Math.floor((rng ? rng.next() : Math.random()) * 100)
+
+          this.triggerDisaster(chosenType, severity, currentRotation, epicenterCellId)
+        }
+      }
+    }
 
     this.recalculatePerturbations(currentRotation)
     return this.currentPerturbations
@@ -179,17 +305,22 @@ export class DisasterManager {
     this.activeDisasters = []
     this.currentPerturbations = { ...DEFAULT_PERTURBATIONS }
     this.lastPulseRotation = -1
+    this.lastDisasterEndRotation = 0
   }
 
   exportState(): {
     activeDisasters: ActiveDisaster[]
     nextDisasterId: number
     lastPulseRotation: number
+    autoDisastersEnabled?: boolean
+    lastDisasterEndRotation?: number
   } {
     return {
       activeDisasters: this.activeDisasters.map((d) => ({ ...d })),
       nextDisasterId: this.nextDisasterId,
       lastPulseRotation: this.lastPulseRotation,
+      autoDisastersEnabled: this.autoDisastersEnabled,
+      lastDisasterEndRotation: this.lastDisasterEndRotation,
     }
   }
 
@@ -198,12 +329,16 @@ export class DisasterManager {
       activeDisasters: readonly ActiveDisaster[]
       nextDisasterId: number
       lastPulseRotation: number
+      autoDisastersEnabled?: boolean
+      lastDisasterEndRotation?: number
     },
     currentRotation = 0
   ): void {
     this.activeDisasters = state.activeDisasters.map((d) => ({ ...d }))
     this.nextDisasterId = Math.max(1, state.nextDisasterId)
     this.lastPulseRotation = state.lastPulseRotation
+    this.autoDisastersEnabled = state.autoDisastersEnabled ?? true
+    this.lastDisasterEndRotation = state.lastDisasterEndRotation ?? currentRotation
     this.recalculatePerturbations(currentRotation)
   }
 }

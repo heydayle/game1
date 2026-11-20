@@ -6,6 +6,7 @@ import type { PlanetConfig } from '../../../genesis/types/genesis.js'
 import { Species } from '../Species.js'
 import { Organism } from '../Organism.js'
 import { PrebioticEngine } from '../../abiogenesis/PrebioticEngine.js'
+import { GeneExpression } from '../../genetics/Gene.js'
 import type { SpeciationEvent } from '../../taxonomy/types.js'
 
 describe('PopulationManager', () => {
@@ -543,5 +544,236 @@ describe('PopulationManager', () => {
         ]).toContain(sp.traits.tier)
       }
     }
+  })
+
+  it('enforces extinction of fauna herbivores when plant/flora cover is extinct, even if microbes exist', () => {
+    manager.initPlanet(planetConfig)
+    const rng = new SeededRNG(777)
+
+    const prebioticEngine = new PrebioticEngine()
+    const microbeGenotype = prebioticEngine.generatePrimordialGenotype(
+      planetConfig,
+      'cyanobacteria'
+    )
+
+    // Dedicated herbivore genotype: low metabolic rate (0.2) + moderate mobility (0.5)
+    // In TaxonomyEngine at gen 25, this evaluates to: tier = 'complex_bilaterian', domain = 'fauna', trophicRole = 'herbivore'
+    const herbivoreGenotype = {
+      genes: {
+        thermalOptimum: GeneExpression.createGene('thermalOptimum', 0.5),
+        thermalRange: GeneExpression.createGene('thermalRange', 0.5),
+        waterConservation: GeneExpression.createGene('waterConservation', 0.5),
+        metabolicEfficiency: GeneExpression.createGene('metabolicEfficiency', 0.2),
+        reproductiveInvestment: GeneExpression.createGene('reproductiveInvestment', 0.5),
+        structuralArmor: GeneExpression.createGene('structuralArmor', 0.3),
+        mobilityFactor: GeneExpression.createGene('mobilityFactor', 0.5),
+      },
+    }
+
+    // Species 1: Microbe autotroph (Cyanobacteria) in ocean cell 0
+    const microbeSpecies = new Species(
+      'sp_microbe_producer',
+      'Vi khuẩn quang hợp',
+      microbeGenotype,
+      1,
+      1,
+      '#06b6d4',
+      planetConfig
+    )
+
+    // Species 2: Metazoan Herbivore (Fauna) in land cell 10 at generation 25
+    const herbivoreSpecies = new Species(
+      'sp_fauna_herbivore',
+      'Động vật ăn thực vật',
+      herbivoreGenotype,
+      1,
+      0,
+      '#10b981',
+      planetConfig
+    )
+    herbivoreSpecies.generation = 25
+    herbivoreSpecies.updateTraits(planetConfig)
+
+    expect(herbivoreSpecies.traits.domain).toBe('fauna')
+    expect(herbivoreSpecies.traits.trophicRole).toBe('herbivore')
+
+    manager.restoreState(
+      {
+        currentGeneration: 25,
+        nextOrganismId: 10,
+        nextSpeciesId: 5,
+        species: [
+          {
+            id: microbeSpecies.id,
+            name: microbeSpecies.name,
+            color: microbeSpecies.color,
+            generation: 1,
+            emergenceRotation: 1,
+            isExtinct: false,
+            extinctionRotation: null,
+            foundingGenotype: microbeGenotype,
+          },
+          {
+            id: herbivoreSpecies.id,
+            name: herbivoreSpecies.name,
+            color: herbivoreSpecies.color,
+            generation: 25,
+            emergenceRotation: 1,
+            isExtinct: false,
+            extinctionRotation: null,
+            foundingGenotype: herbivoreGenotype,
+          },
+        ],
+        organisms: [
+          // 50 cyanobacteria in cell 0
+          new Organism('org_m1', 'sp_microbe_producer', microbeGenotype, 1, 8.0, 50, 0),
+          // 20 fauna herbivores in cell 10
+          new Organism('org_h1', 'sp_fauna_herbivore', herbivoreGenotype, 25, 8.0, 20, 10),
+          new Organism('org_h2', 'sp_fauna_herbivore', herbivoreGenotype, 25, 8.0, 20, 10),
+        ],
+        prebiotic: {
+          stage: 'inhabited',
+          organicComplexity: 1.0,
+        },
+      },
+      planetConfig
+    )
+
+    // Step 1: Plants (flora) are extinct (0 flora species on the planet).
+    // Fauna herbivores must NOT multiply; they should starve.
+    const summary1 = manager.step(1, planetConfig, rng)
+
+    const herbSummary1 = summary1.speciesSummaries.find((s) => s.id === 'sp_fauna_herbivore')!
+    expect(herbSummary1.hungerState).toBe('starving')
+    expect(herbSummary1.foodChainSummary).toContain('chết đói')
+
+    // Herbivore population must not expand:
+    expect(herbSummary1.population).toBeLessThanOrEqual(40)
+
+    // Step several more rotations:
+    for (let r = 2; r <= 8; r++) {
+      manager.step(r, planetConfig, rng)
+    }
+
+    // The fauna herbivores must collapse and go extinct due to lack of plant cover
+    const finalSummary = manager.step(9, planetConfig, rng)
+    const finalHerb = finalSummary.speciesSummaries.find((s) => s.id === 'sp_fauna_herbivore')
+    expect(finalHerb).toBeUndefined()
+    expect(manager.getSpeciesList().find((s) => s.id === 'sp_fauna_herbivore')).toBeUndefined()
+    expect(finalSummary.extinctSpeciesCount).toBeGreaterThanOrEqual(1)
+  })
+
+  it('purges extinct species completely from speciesMap and summaries to optimize performance', () => {
+    const manager = new PopulationManager()
+    const planetConfig = GenesisEngine.generatePlanet({}, 42)
+    manager.initPlanet(planetConfig)
+    const rng = new SeededRNG(123)
+
+    const genotype = {
+      genes: {
+        thermalOptimum: GeneExpression.createGene('thermalOptimum', 0.5),
+        thermalRange: GeneExpression.createGene('thermalRange', 0.5),
+        waterConservation: GeneExpression.createGene('waterConservation', 0.5),
+        metabolicEfficiency: GeneExpression.createGene('metabolicEfficiency', 0.5),
+        reproductiveInvestment: GeneExpression.createGene('reproductiveInvestment', 0.5),
+        structuralArmor: GeneExpression.createGene('structuralArmor', 0.5),
+        mobilityFactor: GeneExpression.createGene('mobilityFactor', 0.5),
+      },
+    }
+
+    const doomedSpecies = new Species('sp_doomed', 'Doomed Species', genotype, 1, 0, '#ffffff', planetConfig)
+    const healthySpecies = new Species('sp_healthy', 'Healthy Species', genotype, 1, 0, '#00ff00', planetConfig)
+
+    manager.restoreState(
+      {
+        currentGeneration: 5,
+        nextOrganismId: 10,
+        nextSpeciesId: 5,
+        species: [
+          {
+            id: doomedSpecies.id,
+            name: doomedSpecies.name,
+            color: doomedSpecies.color,
+            generation: 5,
+            emergenceRotation: 1,
+            isExtinct: false,
+            extinctionRotation: null,
+            foundingGenotype: genotype,
+          },
+          {
+            id: healthySpecies.id,
+            name: healthySpecies.name,
+            color: healthySpecies.color,
+            generation: 5,
+            emergenceRotation: 1,
+            isExtinct: false,
+            extinctionRotation: null,
+            foundingGenotype: genotype,
+          },
+        ],
+        organisms: [
+          // 0 organisms for doomed species
+          // 100 organisms for healthy species in ocean cell
+          new Organism('org_healthy_1', 'sp_healthy', genotype, 5, 10.0, 100, 0),
+        ],
+        prebiotic: {
+          stage: 'inhabited',
+          organicComplexity: 1.0,
+        },
+      },
+      planetConfig
+    )
+
+    expect(manager.getSpeciesList().length).toBe(2)
+
+    // Step 1: Detects doomedSpecies has 0 organisms, purges it
+    const summary = manager.step(1, planetConfig, rng)
+
+    // Doomed species must be completely wiped from speciesMap and speciesSummaries
+    expect(manager.getSpeciesList().length).toBe(1)
+    expect(manager.getSpeciesList().find((s) => s.id === 'sp_doomed')).toBeUndefined()
+    expect(summary.speciesSummaries.find((s) => s.id === 'sp_doomed')).toBeUndefined()
+    expect(summary.activeSpeciesCount).toBe(1)
+    expect(summary.extinctSpeciesCount).toBe(1)
+
+    // Exported state must not contain doomed species
+    const exported = manager.exportState()
+    expect(exported.species.find((s) => s.id === 'sp_doomed')).toBeUndefined()
+  })
+
+  it('automatically sparks a new microbial lineage when parallel chemistry saturates', () => {
+    const manager = new PopulationManager()
+    const planetConfig = GenesisEngine.generatePlanet({}, 42)
+    manager.initPlanet(planetConfig)
+    const rng = new SeededRNG(999)
+
+    // Spark initial life
+    manager.sparkBiogenesis(planetConfig, rng)
+    expect(manager.getSpeciesList().length).toBe(1)
+
+    // Catalyze chemistry to saturate prebiotic reservoir
+    for (let i = 0; i < 5; i++) {
+      manager.triggerChemicalCatalyst('spark')
+      manager.triggerChemicalCatalyst('vent')
+    }
+
+    // Step several rotations (>= 3)
+    let speciationCount = 0
+    for (let r = 2; r <= 15; r++) {
+      const summary = manager.step(r, planetConfig, rng)
+      const deNovoEvent = summary.speciationEvents.find(
+        (e) => e.eventType === 'de_novo_chemical_synthesis'
+      )
+      if (deNovoEvent) {
+        speciationCount++
+        expect(deNovoEvent.eventType).toBe('de_novo_chemical_synthesis')
+        expect(deNovoEvent.description).toContain('Dòng vi sinh mới')
+        break
+      }
+    }
+
+    // A new microbial lineage was automatically sparked from prebiotic chemistry
+    expect(speciationCount).toBeGreaterThanOrEqual(1)
+    expect(manager.getSpeciesList().length).toBeGreaterThanOrEqual(2)
   })
 })

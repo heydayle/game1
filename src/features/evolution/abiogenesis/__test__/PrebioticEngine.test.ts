@@ -95,7 +95,7 @@ describe('PrebioticEngine', () => {
     expect(chem.archetype).toBe('Chemoarchaeon Primus')
 
     const genotype = engine.generatePrimordialGenotype(ventPlanet, chem.archetype)
-    expect(genotype.genes.thermalOptimum.alleleA.value).toBeGreaterThanOrEqual(0.7)
+    expect(genotype.genes.thermalOptimum!.alleleA.value).toBeGreaterThanOrEqual(0.7)
   })
 
   it('maintains continuous parallel chemical evolution during inhabited era with biotic feedback', () => {

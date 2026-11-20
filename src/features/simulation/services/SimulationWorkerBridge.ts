@@ -128,6 +128,13 @@ export class SimulationWorkerBridge {
     })
   }
 
+  setAutoDisasters(enabled: boolean): void {
+    this.sendCommand({
+      type: 'set-auto-disasters',
+      enabled,
+    })
+  }
+
   sparkBiogenesis(): void {
     this.sendCommand({ type: 'spark-biogenesis' })
   }

@@ -1,7 +1,6 @@
 import type {
   Allele,
   Gene,
-  GeneticLocus,
   Genotype,
   Phenotype,
 } from './types.js'
@@ -36,9 +35,11 @@ export class GeneExpression {
 
   /**
    * Translates a complete Genotype into concrete Phenotype attributes.
+   * Works with the seven GeneticLocusCore loci. Additional registry loci are
+   * carried in the genotype but do not modify the core Phenotype mapping.
    */
   static expressGenotype(genotype: Genotype): Phenotype {
-    const express = (locus: GeneticLocus): number => {
+    const express = (locus: string): number => {
       const g = genotype.genes[locus]
       return g ? GeneExpression.expressGene(g) : 0.5
     }
@@ -92,22 +93,21 @@ export class GeneExpression {
 
   /**
    * Computes the normalized genetic Euclidean distance between two genotypes in [0.0, 1.0].
+   * Works with any set of string loci — not limited to the seven GeneticLocusCore values.
    */
   static calculateGeneticDistance(a: Genotype, b: Genotype): number {
-    const loci: GeneticLocus[] = [
-      'thermalOptimum',
-      'thermalRange',
-      'waterConservation',
-      'metabolicEfficiency',
-      'reproductiveInvestment',
-      'structuralArmor',
-      'mobilityFactor',
-    ]
+    // Build the union of all loci present in either genotype
+    const lociSet = new Set<string>([
+      ...Object.keys(a.genes),
+      ...Object.keys(b.genes),
+    ])
+    const loci = Array.from(lociSet)
+    if (loci.length === 0) return 0
 
     let sumSquaredDiff = 0
     for (const locus of loci) {
-      const valA = GeneExpression.expressGene(a.genes[locus])
-      const valB = GeneExpression.expressGene(b.genes[locus])
+      const valA = a.genes[locus] ? GeneExpression.expressGene(a.genes[locus]!) : 0.5
+      const valB = b.genes[locus] ? GeneExpression.expressGene(b.genes[locus]!) : 0.5
       const diff = valA - valB
       sumSquaredDiff += diff * diff
     }
@@ -117,9 +117,10 @@ export class GeneExpression {
 
   /**
    * Helper to instantiate a homozygous or heterozygous diploid gene.
+   * locus accepts any string key — not restricted to GeneticLocusCore.
    */
   static createGene(
-    locus: GeneticLocus,
+    locus: string,
     valA: number,
     domA: Allele['dominance'] = 'dominant',
     valB: number = valA,

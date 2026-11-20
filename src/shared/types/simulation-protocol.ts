@@ -50,6 +50,7 @@ export interface SimulationSnapshot {
   // Planetary Disaster State (Phase 6)
   readonly activeDisasters: readonly ActiveDisasterSummary[]
   readonly perturbations: EnvironmentalPerturbations
+  readonly autoDisastersEnabled?: boolean
 
   // Prebiotic Chemical Soup & Abiogenesis State
   readonly prebioticState: PrebioticState
@@ -110,6 +111,11 @@ export interface TriggerDisasterCommand {
   readonly epicenterCellId?: number
 }
 
+export interface SetAutoDisastersCommand {
+  readonly type: 'set-auto-disasters'
+  readonly enabled: boolean
+}
+
 export interface SparkBiogenesisCommand {
   readonly type: 'spark-biogenesis'
 }
@@ -139,6 +145,7 @@ export type SimulationCommand =
   | SeedPopulationCommand
   | TriggerStressCommand
   | TriggerDisasterCommand
+  | SetAutoDisastersCommand
   | SparkBiogenesisCommand
   | CatalyzeChemistryCommand
   | ExportStateCommand

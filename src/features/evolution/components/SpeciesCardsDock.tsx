@@ -203,7 +203,7 @@ export function SpeciesCardsDock({
     "all",
   );
   const [activeRole, setActiveRole] = useState<TrophicRole | "all">("all");
-  const [activeView, setActiveView] = useState<"cards" | "food_web">("cards");
+  const [activeView, setActiveView] = useState<"cards" | "food_web" | "taxonomy">("cards");
 
   // Calculate counts per domain
   const domainCounts = useMemo(() => {
@@ -248,16 +248,54 @@ export function SpeciesCardsDock({
     return speciesSummaries.filter((s) => !s.isExtinct).length;
   }, [speciesSummaries]);
 
-  // Trophic food chain pyramid groupings
+  // Trophic food chain pyramid groupings (6-level complete biological food chain)
   const trophicPyramid = useMemo(() => {
     const active = speciesSummaries.filter((s) => !s.isExtinct);
     return {
+      // Legacy backwards-compatible fields
       carnivores: active.filter((s) => s.trophicRole === "carnivore"),
       herbivores: active.filter(
         (s) => s.trophicRole === "herbivore" || s.trophicRole === "omnivore",
       ),
       producers: active.filter((s) => s.trophicRole === "producer"),
       decomposers: active.filter((s) => s.trophicRole === "decomposer"),
+
+      // 6-level biological food chain hierarchy:
+      level5Apex: active.filter(
+        (s) =>
+          s.trophicRole !== "decomposer" &&
+          s.domain !== "fungi" &&
+          ((s.trophicLevel ?? 1) >= 5 || s.tier === "sapient"),
+      ),
+      level4Tertiary: active.filter(
+        (s) =>
+          s.trophicRole !== "decomposer" &&
+          s.domain !== "fungi" &&
+          (s.trophicLevel ?? 1) === 4 &&
+          s.tier !== "sapient",
+      ),
+      level3Secondary: active.filter(
+        (s) =>
+          s.trophicRole !== "decomposer" &&
+          s.domain !== "fungi" &&
+          (s.trophicLevel ?? 1) === 3 &&
+          s.tier !== "sapient",
+      ),
+      level2PrimaryConsumers: active.filter(
+        (s) =>
+          s.trophicRole !== "decomposer" &&
+          s.domain !== "fungi" &&
+          (s.trophicLevel ?? 1) === 2,
+      ),
+      level1Producers: active.filter(
+        (s) =>
+          s.trophicRole !== "decomposer" &&
+          s.domain !== "fungi" &&
+          (s.trophicLevel ?? 1) === 1,
+      ),
+      decomposersList: active.filter(
+        (s) => s.trophicRole === "decomposer" || s.domain === "fungi",
+      ),
     };
   }, [speciesSummaries]);
 
@@ -347,6 +385,19 @@ export function SpeciesCardsDock({
                 }`}
               >
                 🔗 Chuỗi & Mạng Lưới Thức Ăn
+              </button>
+              <button
+                onClick={() => {
+                  SoundFX.playClick();
+                  setActiveView("taxonomy");
+                }}
+                className={`rounded px-2.5 py-0.5 transition-all ${
+                  activeView === "taxonomy"
+                    ? "bg-emerald-600 text-white font-semibold shadow"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                🏛️ Phân Loại Học & Quần Thể
               </button>
             </div>
 
@@ -567,27 +618,167 @@ export function SpeciesCardsDock({
 
         {/* View Mode 2: Trophic Food Web & Pyramid */}
         {activeView === "food_web" && (
-          <div className="mt-3 max-h-64 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
-            {/* Level 3: Apex & Carnivores */}
-            <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-2.5">
-              <div className="flex items-center justify-between border-b border-rose-500/20 pb-1.5">
-                <span className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
-                  <span>
-                    🥩 Bậc 3: Động Vật Ăn Thịt & Săn Mồi (Apex & Secondary
-                    Carnivores)
-                  </span>
+          <div className="mt-3 max-h-80 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+            {/* Educational Food Chain Energy Flow Diagrams */}
+            <div className="rounded-xl border border-sky-500/30 bg-sky-950/25 p-2.5 text-[11px]">
+              <div className="flex items-center justify-between border-b border-sky-500/20 pb-1.5 text-xs font-bold text-sky-300">
+                <span className="flex items-center gap-1.5">
+                  <span>🌐 Sơ Đồ Chuỗi Thức Ăn & Dòng Năng Lượng Điển Hình</span>
                 </span>
+                <span className="text-[10px] font-mono text-cyan-400">
+                  Bậc 1 ➔ Bậc 5 ➔ Phân Giải
+                </span>
+              </div>
+              <div className="mt-2 space-y-1.5 font-mono text-[10px]">
+                <div className="rounded-lg border border-cyan-500/25 bg-black/50 p-2 text-cyan-200">
+                  <div className="font-bold text-cyan-300 mb-0.5">
+                    🌊 Chuỗi Dưới Nước (Aquatic Chain):
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1 text-[9.5px]">
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 font-semibold">Tảo đơn bào (Bậc 1)</span>
+                    <span className="text-gray-500">➔</span>
+                    <span className="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-500/30 font-semibold">Bọ nước Daphnia (Bậc 2)</span>
+                    <span className="text-gray-500">➔</span>
+                    <span className="px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-500/30 font-semibold">Cá nhỏ (Bậc 3)</span>
+                    <span className="text-gray-500">➔</span>
+                    <span className="px-1.5 py-0.5 rounded bg-red-950/80 text-red-300 border border-red-500/30 font-semibold">Hải cẩu (Bậc 4)</span>
+                    <span className="text-gray-500">➔</span>
+                    <span className="px-1.5 py-0.5 rounded bg-yellow-950/80 text-yellow-300 border border-yellow-500/30 font-semibold">Cá voi sát thủ (Bậc 5)</span>
+                    <span className="text-gray-500">➔</span>
+                    <span className="px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-500/30 font-semibold">Vi khuẩn phân hủy 🔄</span>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-emerald-500/25 bg-black/50 p-2 text-emerald-200">
+                  <div className="font-bold text-emerald-300 mb-0.5">
+                    🌿 Chuỗi Ven Bờ & Trên Cạn (Terrestrial / Shore Chain):
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1 text-[9.5px]">
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 font-semibold">Vi khuẩn lam / Tảo (Bậc 1)</span>
+                    <span className="text-gray-500">➔</span>
+                    <span className="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-500/30 font-semibold">Ấu trùng / Côn trùng (Bậc 2)</span>
+                    <span className="text-gray-500">➔</span>
+                    <span className="px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-500/30 font-semibold">Ếch / Cá lớn (Bậc 3)</span>
+                    <span className="text-gray-500">➔</span>
+                    <span className="px-1.5 py-0.5 rounded bg-red-950/80 text-red-300 border border-red-500/30 font-semibold">Cò / Chồn săn mồi (Bậc 4)</span>
+                    <span className="text-gray-500">➔</span>
+                    <span className="px-1.5 py-0.5 rounded bg-yellow-950/80 text-yellow-300 border border-yellow-500/30 font-semibold">Gấu / Thú ăn tạp đỉnh chuỗi (Bậc 5)</span>
+                    <span className="text-gray-500">➔</span>
+                    <span className="px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-500/30 font-semibold">Nấm & Vi khuẩn phân giải 🔄</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Level 5: Apex Mammals & Sapient Organisms */}
+            <div className="rounded-xl border border-yellow-500/40 bg-yellow-950/20 p-2.5">
+              <div className="flex items-center justify-between border-b border-yellow-500/20 pb-1.5">
+                <div>
+                  <span className="text-xs font-bold text-yellow-300 flex items-center gap-1.5">
+                    <span>👑 Bậc 5: Động Vật Có Vú & Đỉnh Chuỗi (Apex Mammals & Sapient)</span>
+                  </span>
+                  <div className="text-[9.5px] text-yellow-400/80 mt-0.5">
+                    Hải cẩu, cá voi sát thủ, gấu, hổ báo & sinh vật trí tuệ — Quản lý đỉnh chuỗi thức ăn
+                  </div>
+                </div>
                 <span className="text-[10px] text-gray-400 font-mono">
-                  {trophicPyramid.carnivores.length} loài
+                  {trophicPyramid.level5Apex.length} loài
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                {trophicPyramid.carnivores.length === 0 ? (
+                {trophicPyramid.level5Apex.length === 0 ? (
                   <span className="text-[10px] text-gray-400 italic">
-                    Chưa có thú săn mồi nào.
+                    Chưa xuất hiện động vật có vú đỉnh chuỗi hay sinh vật trí tuệ.
                   </span>
                 ) : (
-                  trophicPyramid.carnivores.map((sp) => (
+                  trophicPyramid.level5Apex.map((sp) => (
+                    <div
+                      key={sp.id}
+                      className="rounded-lg border border-yellow-500/40 bg-gray-950/80 px-2.5 py-1.5 text-[10px] flex items-center gap-2"
+                    >
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: sp.color }}
+                      />
+                      <strong className="text-white">{sp.name}</strong>
+                      <span className="text-yellow-300 font-mono">
+                        ({formatPopulation(sp.population)})
+                      </span>
+                      <span className="text-gray-400 text-[9px] italic">
+                        Đỉnh chuỗi (Apex) ➔
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Level 4: Tertiary Consumers (Cá lớn, Chim săn cá, Bò sát) */}
+            <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-2.5">
+              <div className="flex items-center justify-between border-b border-red-500/20 pb-1.5">
+                <div>
+                  <span className="text-xs font-bold text-red-300 flex items-center gap-1.5">
+                    <span>🦅 Bậc 4: Động Vật Ăn Thịt Bậc Cao (Tertiary Consumers / Apex Predators)</span>
+                  </span>
+                  <div className="text-[9.5px] text-red-400/80 mt-0.5">
+                    Cá lớn (cá thu, cá ngừ), chim ăn cá, bò sát săn mồi — Kiểm soát số lượng động vật cấp 3
+                  </div>
+                </div>
+                <span className="text-[10px] text-gray-400 font-mono">
+                  {trophicPyramid.level4Tertiary.length} loài
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {trophicPyramid.level4Tertiary.length === 0 ? (
+                  <span className="text-[10px] text-gray-400 italic">
+                    Chưa có động vật săn mồi bậc 4.
+                  </span>
+                ) : (
+                  trophicPyramid.level4Tertiary.map((sp) => (
+                    <div
+                      key={sp.id}
+                      className="rounded-lg border border-red-500/40 bg-gray-950/80 px-2.5 py-1.5 text-[10px] flex items-center gap-2"
+                    >
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: sp.color }}
+                      />
+                      <strong className="text-white">{sp.name}</strong>
+                      <span className="text-red-300 font-mono">
+                        ({formatPopulation(sp.population)})
+                      </span>
+                      <span className="text-gray-400 text-[9px] italic">
+                        Săn cá nhỏ & bậc 2-3 ➔
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Level 3: Secondary Consumers (Cá nhỏ, Nòng nọc, Côn trùng ăn thịt) */}
+            <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-2.5">
+              <div className="flex items-center justify-between border-b border-rose-500/20 pb-1.5">
+                <div>
+                  <span className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
+                    <span>
+                      🥩 Bậc 3: Động Vật Ăn Thịt & Săn Mồi (Secondary Consumers - Cá Nhỏ & Côn Trùng Săn Mồi)
+                    </span>
+                  </span>
+                  <div className="text-[9.5px] text-rose-400/80 mt-0.5">
+                    Cá nhỏ (cá cơm, cá con), nòng nọc/ếch nhái, côn trùng ăn thịt — Săn các sinh vật tiêu thụ bậc 1
+                  </div>
+                </div>
+                <span className="text-[10px] text-gray-400 font-mono">
+                  {trophicPyramid.level3Secondary.length} loài
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {trophicPyramid.level3Secondary.length === 0 ? (
+                  <span className="text-[10px] text-gray-400 italic">
+                    Chưa có thú săn mồi bậc 3 nào.
+                  </span>
+                ) : (
+                  trophicPyramid.level3Secondary.map((sp) => (
                     <div
                       key={sp.id}
                       className="rounded-lg border border-rose-500/40 bg-gray-950/80 px-2.5 py-1.5 text-[10px] flex items-center gap-2"
@@ -601,7 +792,7 @@ export function SpeciesCardsDock({
                         ({formatPopulation(sp.population)})
                       </span>
                       <span className="text-gray-400 text-[9px] italic">
-                        Săn động vật ăn cỏ ➔
+                        Săn động vật bậc 2 ➔
                       </span>
                     </div>
                   ))
@@ -609,26 +800,30 @@ export function SpeciesCardsDock({
               </div>
             </div>
 
-            {/* Level 2: Herbivores & Omnivores */}
+            {/* Level 2: Primary Consumers (Herbivores & Omnivores) */}
             <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-2.5">
               <div className="flex items-center justify-between border-b border-amber-500/20 pb-1.5">
-                <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                  <span>
-                    🥬 Bậc 2: Động Vật Ăn Thực Vật & Ăn Tạp (Primary Consumers &
-                    Herbivores)
+                <div>
+                  <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <span>
+                      🥬 Bậc 2: Động Vật Ăn Thực Vật & Ăn Tạp (Primary Consumers & Herbivores)
+                    </span>
                   </span>
-                </span>
+                  <div className="text-[9.5px] text-amber-400/80 mt-0.5">
+                    Trùng giày, bọ nước Daphnia, giáp xác, ấu trùng & động vật ăn cỏ — Chuyển hóa quang sinh khối sang động vật
+                  </div>
+                </div>
                 <span className="text-[10px] text-gray-400 font-mono">
-                  {trophicPyramid.herbivores.length} loài
+                  {trophicPyramid.level2PrimaryConsumers.length} loài
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                {trophicPyramid.herbivores.length === 0 ? (
+                {trophicPyramid.level2PrimaryConsumers.length === 0 ? (
                   <span className="text-[10px] text-gray-400 italic">
-                    Chưa có động vật ăn cỏ nào.
+                    Chưa có động vật ăn cỏ hay giáp xác nào.
                   </span>
                 ) : (
-                  trophicPyramid.herbivores.map((sp) => (
+                  trophicPyramid.level2PrimaryConsumers.map((sp) => (
                     <div
                       key={sp.id}
                       className="rounded-lg border border-amber-500/40 bg-gray-950/80 px-2.5 py-1.5 text-[10px] flex items-center gap-2"
@@ -650,26 +845,30 @@ export function SpeciesCardsDock({
               </div>
             </div>
 
-            {/* Level 1: Primary Producers (Flora / Algae) */}
+            {/* Level 1: Primary Producers (Flora / Algae / Cyanobacteria) */}
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-2.5">
               <div className="flex items-center justify-between border-b border-emerald-500/20 pb-1.5">
-                <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                  <span>
-                    🌿 Bậc 1: Sinh Vật Sản Xuất Nền Tảng (Primary Producers -
-                    Thực Vật & Tảo)
+                <div>
+                  <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                    <span>
+                      🌿 Bậc 1: Sinh Vật Sản Xuất Nền Tảng (Primary Producers - Thực Vật & Tảo)
+                    </span>
                   </span>
-                </span>
+                  <div className="text-[9.5px] text-emerald-400/80 mt-0.5">
+                    Tảo đơn bào (lục, silic, giáp), vi khuẩn lam quang hợp & thực vật — Hấp thụ ánh sáng sao, nước và CO2
+                  </div>
+                </div>
                 <span className="text-[10px] text-gray-400 font-mono">
-                  {trophicPyramid.producers.length} loài
+                  {trophicPyramid.level1Producers.length} loài
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                {trophicPyramid.producers.length === 0 ? (
+                {trophicPyramid.level1Producers.length === 0 ? (
                   <span className="text-[10px] text-gray-400 italic">
                     Chưa có sinh vật sản xuất nào.
                   </span>
                 ) : (
-                  trophicPyramid.producers.map((sp) => (
+                  trophicPyramid.level1Producers.map((sp) => (
                     <div
                       key={sp.id}
                       className="rounded-lg border border-emerald-500/40 bg-gray-950/80 px-2.5 py-1.5 text-[10px] flex items-center gap-2"
@@ -683,7 +882,7 @@ export function SpeciesCardsDock({
                         ({formatPopulation(sp.population)})
                       </span>
                       <span className="text-gray-400 text-[9px] italic">
-                        Quang hợp ánh sáng sao
+                        Quang hợp mở đầu chuỗi
                       </span>
                     </div>
                   ))
@@ -691,22 +890,30 @@ export function SpeciesCardsDock({
               </div>
             </div>
 
-            {/* Decomposers (Fungi & Microbes) */}
-            {trophicPyramid.decomposers.length > 0 && (
-              <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-2.5">
-                <div className="flex items-center justify-between border-b border-purple-500/20 pb-1.5">
+            {/* Decomposers (Fungi, Saprotrophic Microbes & Benthic Organisms) */}
+            <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-2.5">
+              <div className="flex items-center justify-between border-b border-purple-500/20 pb-1.5">
+                <div>
                   <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
                     <span>
-                      🍄 Sinh Vật Phân Giải & Tái Tạo Khoáng (Decomposers - Nấm
-                      & Vi Khuẩn Hoại Sinh)
+                      🍄 Sinh Vật Phân Giải & Tuần Hoàn Vật Chất (Decomposers - Nấm & Vi Khuẩn Hoại Sinh)
                     </span>
                   </span>
-                  <span className="text-[10px] text-gray-400 font-mono">
-                    {trophicPyramid.decomposers.length} loài
-                  </span>
+                  <div className="text-[9.5px] text-purple-400/80 mt-0.5">
+                    Vi khuẩn hoại sinh, nấm & giun/động vật đáy — Phân hủy xác chết và chất thải của mọi mắt xích thành chất vô cơ
+                  </div>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {trophicPyramid.decomposers.map((sp) => (
+                <span className="text-[10px] text-gray-400 font-mono">
+                  {trophicPyramid.decomposersList.length} loài
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {trophicPyramid.decomposersList.length === 0 ? (
+                  <span className="text-[10px] text-gray-400 italic">
+                    Chưa có sinh vật phân giải chuyên biệt.
+                  </span>
+                ) : (
+                  trophicPyramid.decomposersList.map((sp) => (
                     <div
                       key={sp.id}
                       className="rounded-lg border border-purple-500/40 bg-gray-950/80 px-2.5 py-1.5 text-[10px] flex items-center gap-2"
@@ -720,13 +927,223 @@ export function SpeciesCardsDock({
                         ({formatPopulation(sp.population)})
                       </span>
                       <span className="text-gray-400 text-[9px] italic">
-                        Tái sinh khoáng chất đất
+                        Tái sinh khoáng chất đất 🔄
                       </span>
                     </div>
-                  ))}
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Mode 3: Biological Organization Levels & Linnaean Hierarchy */}
+        {activeView === "taxonomy" && (
+          <div className="mt-3 max-h-80 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+            {/* 1. Levels of Biological Organization */}
+            <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/25 p-3 text-[11px] space-y-2">
+              <div className="flex items-center justify-between border-b border-indigo-500/20 pb-1.5 text-xs font-bold text-indigo-300">
+                <span className="flex items-center gap-1.5">
+                  <span>🔬 4 Cấp Độ Tổ Chức Sinh Học (Từ Tế Bào Đến Loài)</span>
+                </span>
+                <span className="text-[10px] font-mono text-indigo-400">
+                  Tế bào ➔ Cá thể ➔ Quần thể ➔ Loài
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] font-mono">
+                <div className="rounded-lg border border-indigo-500/20 bg-black/40 p-2 space-y-1">
+                  <div className="font-bold text-indigo-300 flex items-center gap-1">
+                    <span>🧫</span>
+                    <span>1. Tế Bào (Đơn vị cấu tạo & chức năng của sự sống)</span>
+                  </div>
+                  <p className="text-gray-300 text-[9.5px] leading-relaxed">
+                    • <strong className="text-cyan-300">Tế bào nhân sơ (Prokaryote):</strong> Không có nhân hoàn chỉnh, cấu tạo đơn giản, chuỗi DNA trần, phân đôi nhanh (vi khuẩn lam, vi khuẩn hoại sinh).<br />
+                    • <strong className="text-emerald-300">Tế bào nhân thực (Eukaryote):</strong> Có nhân được màng bao bọc và các bào quan chuyên biệt (ti thể, lục lạp). Cơ thể đa bào như động vật có vú và con người cấu tạo từ <strong className="text-amber-300">hàng nghìn tỷ tế bào nhân thực chuyên hóa sâu</strong> (thần kinh, cơ, máu, biểu mô...).
+                  </p>
+                </div>
+                <div className="rounded-lg border border-indigo-500/20 bg-black/40 p-2 space-y-1">
+                  <div className="font-bold text-indigo-300 flex items-center gap-1">
+                    <span>👥</span>
+                    <span>2. Loài & Quần Thể (5 Đặc trưng cơ bản)</span>
+                  </div>
+                  <p className="text-gray-300 text-[9.5px] leading-relaxed">
+                    • <strong className="text-purple-300">Loài (Species):</strong> Tập hợp cá thể cùng kiểu hình, sinh lý, giao phối tự nhiên sinh con hữu thụ.<br />
+                    • <strong className="text-amber-300">Quần thể (Population):</strong> Tập hợp cá thể cùng một loài, cùng sống trong một không gian và thời gian xác định, có khả năng sinh sản tạo thế hệ mới.<br />
+                    • <strong className="text-cyan-300">5 Đặc trưng cốt lõi:</strong> Kích thước, Mật độ, Tỉ lệ giới tính (♂/♀), Nhóm tuổi, Kiểu phân bố (nhóm, đồng đều, ngẫu nhiên). Ví dụ: Quần thể thông nhựa Đông Bắc, chuột đồng trên đồng lúa.
+                  </p>
                 </div>
               </div>
-            )}
+            </div>
+
+            {/* 2. Linnaean Taxonomic Hierarchy: Mammalia to Homo sapiens */}
+            <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-[11px] space-y-2">
+              <div className="flex items-center justify-between border-b border-amber-500/20 pb-1.5 text-xs font-bold text-amber-300">
+                <span className="flex items-center gap-1.5">
+                  <span>👑 Thang Phân Loại Sinh Học Linnaean (Từ Giới Đến Con Người)</span>
+                </span>
+                <span className="text-[10px] font-mono text-amber-400">
+                  Kingdom ➔ Phylum ➔ Class ➔ Order ➔ Family ➔ Genus ➔ Species
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5 text-center font-mono text-[9.5px]">
+                <div className="rounded-lg bg-black/50 border border-amber-500/20 p-1.5">
+                  <span className="text-[8px] text-gray-400 uppercase block">1. Giới (Kingdom)</span>
+                  <span className="font-bold text-white block">Animalia</span>
+                  <span className="text-[8.5px] text-amber-300/80">Động vật</span>
+                </div>
+                <div className="rounded-lg bg-black/50 border border-amber-500/20 p-1.5">
+                  <span className="text-[8px] text-gray-400 uppercase block">2. Ngành (Phylum)</span>
+                  <span className="font-bold text-white block">Chordata</span>
+                  <span className="text-[8.5px] text-amber-300/80">Có dây sống</span>
+                </div>
+                <div className="rounded-lg bg-black/50 border border-amber-500/20 p-1.5">
+                  <span className="text-[8px] text-gray-400 uppercase block">3. Lớp (Class)</span>
+                  <span className="font-bold text-yellow-300 block">Mammalia</span>
+                  <span className="text-[8.5px] text-yellow-400/80">Động vật có vú</span>
+                </div>
+                <div className="rounded-lg bg-black/50 border border-amber-500/20 p-1.5">
+                  <span className="text-[8px] text-gray-400 uppercase block">4. Bộ (Order)</span>
+                  <span className="font-bold text-white block">Primates</span>
+                  <span className="text-[8.5px] text-amber-300/80">Linh trưởng</span>
+                </div>
+                <div className="rounded-lg bg-black/50 border border-amber-500/20 p-1.5">
+                  <span className="text-[8px] text-gray-400 uppercase block">5. Họ (Family)</span>
+                  <span className="font-bold text-white block">Hominidae</span>
+                  <span className="text-[8.5px] text-amber-300/80">Họ Người</span>
+                </div>
+                <div className="rounded-lg bg-black/50 border border-amber-500/20 p-1.5">
+                  <span className="text-[8px] text-gray-400 uppercase block">6. Chi (Genus)</span>
+                  <span className="font-bold text-cyan-300 block">Homo</span>
+                  <span className="text-[8.5px] text-cyan-400/80">Chi Người</span>
+                </div>
+                <div className="rounded-lg bg-black/50 border border-emerald-500/30 p-1.5">
+                  <span className="text-[8px] text-gray-400 uppercase block">7. Loài (Species)</span>
+                  <span className="font-bold text-emerald-300 block italic">H. sapiens</span>
+                  <span className="text-[8.5px] text-emerald-400/80">Người hiện đại</span>
+                </div>
+              </div>
+              <div className="rounded-lg border border-yellow-500/30 bg-black/40 p-2 text-[10px] space-y-1 font-mono">
+                <div className="font-bold text-yellow-300 flex items-center gap-1.5">
+                  <span>🧠 Quần Thể Người (Homo sapiens) & Các Đặc Điểm Xã Hội Vượt Trội:</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[9.5px] text-gray-300">
+                  <div className="bg-white/5 rounded p-1.5 border border-white/5">
+                    • <strong className="text-yellow-300">Tổ chức xã hội:</strong> Gia đình, thị tộc, đô thị hóa, pháp luật, văn hóa và trật tự nhà nước.
+                  </div>
+                  <div className="bg-white/5 rounded p-1.5 border border-white/5">
+                    • <strong className="text-yellow-300">Công cụ & Kỹ thuật:</strong> Chế tác công cụ phức tạp, làm chủ năng lượng, tự động hóa và khoa học công nghệ.
+                  </div>
+                  <div className="bg-white/5 rounded p-1.5 border border-white/5">
+                    • <strong className="text-yellow-300">Văn hóa & Giáo dục:</strong> Ngôn ngữ, chữ viết, truyền đạt tri thức và đạo đức qua các thế hệ.
+                  </div>
+                  <div className="bg-white/5 rounded p-1.5 border border-white/5">
+                    • <strong className="text-yellow-300">Cải tạo môi trường:</strong> Y tế kéo dài tuổi thọ, nông nghiệp và kiến trúc biến đổi môi trường sống chủ động.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Live Species Breakdown with Hierarchy & Demographics */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-gray-300 px-1 border-b border-white/10 pb-1">
+                <span>📋 Danh Sách Phân Loại & Đặc Trưng Quần Thể ({livingSpecies.length} loài đang sống)</span>
+                <span className="text-[10px] font-mono text-gray-500">Dữ liệu sinh thái thời gian thực</span>
+              </div>
+              <div className="space-y-2">
+                {livingSpecies.map((sp) => {
+                  const demo = sp.demographics;
+                  const tax = sp.taxonomicHierarchy ?? sp.biologicalTraits?.taxonomicHierarchy;
+                  const isSap = sp.tier === "sapient" || sp.biologicalTraits?.sapientArchetype === "humanoid";
+                  return (
+                    <div
+                      key={sp.id}
+                      className={`rounded-xl border p-2.5 transition-all text-[10px] font-mono ${
+                        isSap
+                          ? "border-yellow-500/50 bg-gradient-to-r from-yellow-950/30 via-gray-950/80 to-black"
+                          : "border-white/10 bg-gray-950/70"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-white/10 pb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: sp.color }}
+                          />
+                          <strong className="text-xs text-white">{sp.name}</strong>
+                          <span className="text-[10px] italic text-gray-400">
+                            ({sp.scientificName ?? sp.biologicalTraits?.scientificName})
+                          </span>
+                          {isSap && (
+                            <span className="px-1.5 py-0.2 rounded bg-yellow-950 text-yellow-300 border border-yellow-500/40 text-[9px] font-bold">
+                              🧠 Quần thể người / Sapient
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-cyan-300 font-mono">
+                          Dân số: <strong>{formatPopulation(sp.population)}</strong> cá thể
+                        </div>
+                      </div>
+
+                      {/* 7-Level Linnaean Tree */}
+                      {tax && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[9px] bg-black/40 p-1.5 rounded-lg border border-white/5">
+                          <span className="text-gray-400 font-bold">Bậc phân loại:</span>
+                          <span className="text-gray-300">{tax.kingdom}</span>
+                          <span className="text-gray-500">➔</span>
+                          <span className="text-gray-300">{tax.phylum}</span>
+                          <span className="text-gray-500">➔</span>
+                          <span className="text-amber-300 font-semibold">{tax.classRank}</span>
+                          <span className="text-gray-500">➔</span>
+                          <span className="text-gray-300">{tax.orderRank}</span>
+                          <span className="text-gray-500">➔</span>
+                          <span className="text-gray-300">{tax.familyRank}</span>
+                          <span className="text-gray-500">➔</span>
+                          <span className="text-cyan-300 font-bold">{tax.genusRank}</span>
+                          <span className="text-gray-500">➔</span>
+                          <span className="text-emerald-300 font-bold italic">{tax.speciesRank}</span>
+                        </div>
+                      )}
+
+                      {/* 5 Population Demographics */}
+                      {demo && (
+                        <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[9px]">
+                          <div className="bg-black/40 rounded p-1 border border-white/5">
+                            <span className="text-[8px] text-gray-400 block uppercase">Mật độ sinh thái</span>
+                            <span className="text-cyan-300 font-bold">{demo.densityPerCell}</span> cá thể/ô
+                          </div>
+                          <div className="bg-black/40 rounded p-1 border border-white/5">
+                            <span className="text-[8px] text-gray-400 block uppercase">Tỉ lệ giới tính</span>
+                            <span className="text-rose-300 font-bold">{demo.sexRatio.malePct}% ♂</span> :{" "}
+                            <span className="text-emerald-300 font-bold">{demo.sexRatio.femalePct}% ♀</span>
+                          </div>
+                          <div className="bg-black/40 rounded p-1 border border-white/5">
+                            <span className="text-[8px] text-gray-400 block uppercase">Tháp nhóm tuổi</span>
+                            <span className="text-gray-300">
+                              Non: <strong className="text-amber-300">{demo.ageStructure.preReproductivePct}%</strong> |{" "}
+                              Trưởng thành: <strong className="text-emerald-300">{demo.ageStructure.reproductivePct}%</strong> |{" "}
+                              Già: <strong className="text-gray-400">{demo.ageStructure.postReproductivePct}%</strong>
+                            </span>
+                          </div>
+                          <div className="bg-black/40 rounded p-1 border border-white/5">
+                            <span className="text-[8px] text-gray-400 block uppercase">Kiểu phân bố</span>
+                            <span className="text-purple-300 font-medium truncate block" title={demo.distributionLabel}>
+                              {demo.distributionLabel}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Cellular Grade Note */}
+                      {demo?.cellularGradeDetail && (
+                        <div className="mt-1 text-[8.5px] text-gray-400 italic">
+                          Cấu trúc tế bào: {demo.cellularGradeDetail.specialization}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
       </div>

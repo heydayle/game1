@@ -35,8 +35,8 @@ describe('RecombinationEngine', () => {
 
     // Child should have alleleA from parent A (0.1) and alleleB from parent B (0.9)
     const thermalGene = child.genes.thermalOptimum
-    expect(thermalGene.alleleA.value).toBe(0.1)
-    expect(thermalGene.alleleB.value).toBe(0.9)
+    expect(thermalGene!.alleleA.value).toBe(0.1)
+    expect(thermalGene!.alleleB.value).toBe(0.9)
   })
 
   it('asexual replicate creates accurate clonal duplicate', () => {

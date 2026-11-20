@@ -40,6 +40,7 @@ let currentBioState: BiologicalStateSnapshot = {
   biomeCells: [],
   activeDisasters: [],
   perturbations: { ...DEFAULT_PERTURBATIONS },
+  autoDisastersEnabled: true,
   prebioticState: { ...DEFAULT_PREBIOTIC_STATE },
   biogeochemical: { ...DEFAULT_BIOGEOCHEMICAL_STATE },
 }
@@ -73,6 +74,7 @@ function setBioState(
     ...bioResult,
     activeDisasters,
     perturbations,
+    autoDisastersEnabled: disasterManager.isAutoDisastersEnabled(),
     biogeochemical: currentBioState.biogeochemical,
     speciationEvents: [...previousEvents, ...newEvents],
   }
@@ -133,7 +135,7 @@ function handleCommand(command: SimulationCommand): void {
         const bioSteps = Math.min(completedRotations, 10)
         for (let i = 0; i < bioSteps; i++) {
           const currentRot = clock.getRotations()
-          const perturbations = disasterManager.step(currentRot)
+          const perturbations = disasterManager.step(currentRot, rng, currentPlanetConfig)
           const bioResult = populationManager.step(
             currentRot,
             currentPlanetConfig,
@@ -214,6 +216,15 @@ function handleCommand(command: SimulationCommand): void {
         setBioState(bioResult, disasterManager.getActiveSummaries(), perturbations)
         sendSnapshot()
       }
+      break
+
+    case 'set-auto-disasters':
+      disasterManager.setAutoDisastersEnabled(command.enabled)
+      currentBioState = {
+        ...currentBioState,
+        autoDisastersEnabled: command.enabled,
+      }
+      sendSnapshot()
       break
 
     case 'spark-biogenesis':

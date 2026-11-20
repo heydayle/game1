@@ -147,6 +147,7 @@ export class PrebioticEngine {
    */
   catalyzeSpark(): void {
     this.monomerConcentration = Math.min(1.0, this.monomerConcentration + 0.22)
+    this.organicPoolVolume = Math.min(1.0, this.organicPoolVolume + 0.15)
     this.organicComplexity = Math.min(
       1.0,
       this.organicComplexity + 0.12
@@ -161,6 +162,7 @@ export class PrebioticEngine {
   catalyzeVent(): void {
     this.polymerComplexity = Math.min(1.0, this.polymerComplexity + 0.2)
     this.protocellStability = Math.min(1.0, this.protocellStability + 0.2)
+    this.organicPoolVolume = Math.min(1.0, this.organicPoolVolume + 0.15)
     this.organicComplexity = Math.min(
       1.0,
       this.organicComplexity + 0.15
@@ -308,9 +310,9 @@ export class PrebioticEngine {
       // When abiotic synthesis and organic pools reach super-saturation in a living world,
       // a brand new de novo strain can spontaneously synthesize!
       this.deNovoSynthesisReady =
-        this.organicPoolVolume >= 0.85 &&
-        this.protocellStability >= 0.8 &&
-        this.monomerConcentration >= 0.75
+        this.organicPoolVolume >= 0.65 &&
+        this.protocellStability >= 0.6 &&
+        this.monomerConcentration >= 0.55
 
       statusDescription = `Biosphere flourishing. Lineage established from ${chemistry.archetype}. Parallel chemical synthesis flux: ${(this.organicPoolVolume * 100).toFixed(0)}% organic reservoir.`
     }
@@ -348,9 +350,9 @@ export class PrebioticEngine {
         )
 
         if (this.organicComplexity >= 1.0) {
-          statusDescription = `Post-extinction chemical soup saturated (100%). Resurgence of new life imminent for ${chemistry.archetype}!`
+          statusDescription = `Post-extinction chemical soup saturated (100%). Resurgence of new microbial life imminent for ${chemistry.archetype}!`
         } else {
-          statusDescription = `Environmental conditions viable. Secondary prebiotic synthesis in progress (${(this.organicComplexity * 100).toFixed(0)}%).`
+          statusDescription = `Environmental conditions viable. Secondary prebiotic synthesis in progress (${(this.organicComplexity * 100).toFixed(0)}%). Tự động khởi sinh dòng vi sinh mới!`
         }
       } else {
         this.monomerConcentration = Math.max(0.05, this.monomerConcentration - 0.01)
@@ -577,6 +579,10 @@ export class PrebioticEngine {
 
   getDeNovoSynthesisReady(): boolean {
     return this.deNovoSynthesisReady
+  }
+
+  getBiogenesisReadiness(): boolean {
+    return this.organicComplexity >= 0.25
   }
 
   consumeDeNovoBiogenesis(): void {

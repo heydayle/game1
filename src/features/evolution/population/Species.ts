@@ -1,8 +1,8 @@
-import type { Genotype, SpeciesSummary } from '../genetics/types.js'
-import type { Organism } from './Organism.js'
-import type { BiologicalTraits } from '../taxonomy/types.js'
-import { TaxonomyEngine } from '../taxonomy/TaxonomyEngine.js'
 import type { PlanetConfig } from '../../genesis/types/genesis.js'
+import type { Genotype, SpeciesSummary } from '../genetics/types.js'
+import { TaxonomyEngine } from '../taxonomy/TaxonomyEngine.js'
+import type { BiologicalTraits, PopulationDemographics } from '../taxonomy/types.js'
+import type { Organism } from './Organism.js'
 
 const SPECIES_PALETTES = [
   '#10b981', // Emerald
@@ -105,6 +105,91 @@ export class Species {
     const hungerState: 'satiated' | 'hungry' | 'starving' =
       pop <= 0 ? 'starving' : weightedFitness >= 0.6 ? 'satiated' : weightedFitness >= 0.3 ? 'hungry' : 'starving'
 
+    // ── Population Demographics & Social Characteristics ──
+    // 1. Kích thước (Size): pop
+    // 2. Mật độ (Density): Số cá thể / số ô sinh thái có mặt
+    const occupiedCellIds = new Set(livingMembers.map((m) => m.cellId))
+    const densityPerCell = Number((pop / Math.max(1, occupiedCellIds.size)).toFixed(1))
+
+    // 3. Tỉ lệ giới tính (Sex ratio)
+    // Tế bào nhân sơ & nguyên sinh vô tính phân đôi: 100% vô tính
+    // Động vật đối xứng 2 bên, thú & con người: tỉ lệ giới tính xấp xỉ 1:1 (50% Đực : 50% Cái)
+    const isAsexual =
+      this.traits.tier === 'prokaryote' ||
+      this.traits.tier === 'unicellular' ||
+      (this.traits.tier === 'eukaryote' && this.traits.domain !== 'fauna')
+    const sexRatio = isAsexual
+      ? { malePct: 0, femalePct: 100 }
+      : { malePct: 50, femalePct: 50 }
+
+    // 4. Nhóm tuổi (Age Structure: Trước sinh sản, Đang sinh sản, Sau sinh sản)
+    let preReproductiveCount = 0
+    let reproductiveCount = 0
+    let postReproductiveCount = 0
+    for (const m of livingMembers) {
+      if (m.ageRotations < 15) {
+        preReproductiveCount += m.cohortWeight
+      } else if (m.ageRotations <= 50) {
+        reproductiveCount += m.cohortWeight
+      } else {
+        postReproductiveCount += m.cohortWeight
+      }
+    }
+    const safePop = Math.max(1, pop)
+    const preReproductivePct = Math.round((preReproductiveCount / safePop) * 100)
+    const reproductivePct = Math.round((reproductiveCount / safePop) * 100)
+    const postReproductivePct = Math.max(0, 100 - preReproductivePct - reproductivePct)
+
+    // 5. Kiểu phân bố (Spatial Distribution: Clumped / Uniform / Random)
+    let distributionPattern: 'clumped' | 'uniform' | 'random' = 'clumped'
+    let distributionLabel = 'Phân bố theo nhóm (Quần tụ quanh nguồn sống & bầy đàn)'
+    if (occupiedCellIds.size >= 12) {
+      distributionPattern = 'random'
+      distributionLabel = 'Phân bố ngẫu nhiên (Môi trường đồng nhất, phát tán rộng)'
+    } else if (occupiedCellIds.size >= 6) {
+      distributionPattern = 'uniform'
+      distributionLabel = 'Phân bố đồng đều (Cạnh tranh lãnh thổ cân bằng)'
+    }
+
+    // Cấp độ tế bào cấu tạo và chuyên hóa
+    const isProkaryote = this.traits.tier === 'prokaryote' || this.traits.tier === 'unicellular'
+    const cellularGradeDetail = {
+      cellType: isProkaryote ? ('prokaryote' as const) : ('eukaryote' as const),
+      cellTypeLabel: isProkaryote ? 'Tế bào nhân sơ' : 'Tế bào nhân thực',
+      specialization: isProkaryote
+        ? 'Tế bào nhân sơ: Không có màng nhân hoàn chỉnh, cấu tạo đơn giản, chuỗi DNA trần, phân đôi tốc độ cao'
+        : this.traits.tierRank >= 6
+          ? 'Tế bào nhân thực: Cơ thể đa bào cấu tạo từ hàng nghìn tỷ tế bào nhân thực chuyên hóa sâu (tế bào thần kinh, cơ, máu, biểu mô...)'
+          : 'Tế bào nhân thực: Có màng nhân bảo vệ vật chất di truyền, tích hợp ti thể & lục lạp nội cộng sinh',
+    }
+
+    // Đặc điểm xã hội độc nhất nếu là Quần thể người (Homo sapiens) hoặc Sinh vật trí tuệ (Sapient)
+    const isSapient = this.traits.tier === 'sapient' || this.traits.sapientArchetype === 'humanoid'
+    const socialTraits = isSapient
+      ? {
+        isHumanoidOrSapient: true,
+        socialOrganization: 'Tổ chức xã hội cấp tiến: Cấu trúc gia đình, thị tộc, đô thị hóa, pháp luật và trật tự nhà nước',
+        toolUseAndTechnology: 'Chế tác công cụ lao động phức tạp, làm chủ năng lượng, tự động hóa và khoa học kỹ thuật',
+        culturalTransmission: 'Ngôn ngữ, chữ viết, giáo dục truyền đạt văn hóa, đạo đức và tri thức tích lũy qua các thế hệ',
+        environmentalModification: 'Khả năng cải tạo môi trường sống chủ động: Y tế kéo dài tuổi thọ, nông nghiệp, kiến trúc sinh thái',
+      }
+      : undefined
+
+    const demographics: PopulationDemographics = {
+      size: pop,
+      densityPerCell,
+      sexRatio,
+      ageStructure: {
+        preReproductivePct,
+        reproductivePct,
+        postReproductivePct,
+      },
+      distributionPattern,
+      distributionLabel,
+      cellularGradeDetail,
+      socialTraits,
+    }
+
     return {
       id: this.id,
       name: this.name,
@@ -126,6 +211,8 @@ export class Species {
       tierRank: this.traits.tierRank,
       scientificName: this.traits.scientificName,
       biologicalTraits: this.traits,
+      taxonomicHierarchy: this.traits.taxonomicHierarchy,
+      demographics,
       domain: this.traits.domain,
       domainLabel: this.traits.domainLabel,
       domainIcon: this.traits.domainIcon,

@@ -257,4 +257,159 @@ describe('SpeciesCardsDock', () => {
     expect(standaloneCard).toBeInTheDocument()
     expect(screen.getByText('Cuộn ảo ngang • 60 FPS')).toBeInTheDocument()
   })
+
+  it('renders all 6 complete trophic levels and aquatic / terrestrial food chain flows', () => {
+    const baseProducer = mockSpecies[0]!
+    const baseCarnivore = mockSpecies[1]!
+    const multiTrophicSpecies: SpeciesSummary[] = [
+      {
+        ...baseProducer,
+        id: 'sp_p1',
+        name: 'Tảo Đơn Bào Quang Hợp',
+        trophicRole: 'producer',
+        trophicLevel: 1,
+      },
+      {
+        ...baseProducer,
+        id: 'sp_c1',
+        name: 'Bọ Nước Daphnia',
+        trophicRole: 'herbivore',
+        trophicLevel: 2,
+      },
+      {
+        ...baseCarnivore,
+        id: 'sp_c2',
+        name: 'Cá Nhỏ Thủy Sinh',
+        trophicRole: 'carnivore',
+        trophicLevel: 3,
+      },
+      {
+        ...baseCarnivore,
+        id: 'sp_c3',
+        name: 'Hải Cẩu & Chim Biển',
+        trophicRole: 'carnivore',
+        trophicLevel: 4,
+      },
+      {
+        ...baseCarnivore,
+        id: 'sp_c4',
+        name: 'Cá Voi Sát Thủ',
+        trophicRole: 'carnivore',
+        trophicLevel: 5,
+        tier: 'advanced',
+      },
+      {
+        ...baseProducer,
+        id: 'sp_dec',
+        name: 'Vi Khuẩn Hoại Sinh',
+        trophicRole: 'decomposer',
+        domain: 'fungi',
+      },
+    ]
+
+    render(<SpeciesCardsDock speciesSummaries={multiTrophicSpecies} />)
+    fireEvent.click(screen.getByText(/Chuỗi Thức Ăn & Phân Loại Sinh Vật \(6\)/))
+
+    const foodWebBtn = screen.getByRole('button', { name: /Chuỗi & Mạng Lưới Thức Ăn/i })
+    fireEvent.click(foodWebBtn)
+
+    // Check educational diagrams
+    expect(screen.getByText(/Chuỗi Dưới Nước \(Aquatic Chain\)/)).toBeInTheDocument()
+    expect(screen.getByText(/Chuỗi Ven Bờ & Trên Cạn/)).toBeInTheDocument()
+
+    // Check all 6 trophic tiers
+    expect(screen.getByText(/Bậc 5: Động Vật Có Vú & Đỉnh Chuỗi/)).toBeInTheDocument()
+    expect(screen.getByText(/Bậc 4: Động Vật Ăn Thịt Bậc Cao/)).toBeInTheDocument()
+    expect(screen.getByText(/Bậc 3: Động Vật Ăn Thịt & Săn Mồi/)).toBeInTheDocument()
+    expect(screen.getByText(/Bậc 2: Động Vật Ăn Thực Vật & Ăn Tạp/)).toBeInTheDocument()
+    expect(screen.getByText(/Bậc 1: Sinh Vật Sản Xuất Nền Tảng/)).toBeInTheDocument()
+    expect(screen.getByText(/Sinh Vật Phân Giải & Tuần Hoàn Vật Chất/)).toBeInTheDocument()
+
+    // Verify individual species badges
+    expect(screen.getByText('Cá Voi Sát Thủ')).toBeInTheDocument()
+    expect(screen.getByText('Hải Cẩu & Chim Biển')).toBeInTheDocument()
+    expect(screen.getByText('Cá Nhỏ Thủy Sinh')).toBeInTheDocument()
+    expect(screen.getByText('Bọ Nước Daphnia')).toBeInTheDocument()
+    expect(screen.getByText('Tảo Đơn Bào Quang Hợp')).toBeInTheDocument()
+    expect(screen.getByText('Vi Khuẩn Hoại Sinh')).toBeInTheDocument()
+  })
+
+  it('switches to Linnaean Taxonomy & Population Demographics view mode', () => {
+    const baseSapient = mockSpecies[1]!
+    const testList: SpeciesSummary[] = [
+      {
+        ...baseSapient,
+        id: 'sp_sapient',
+        name: 'Con Người Hiện Đại',
+        tier: 'sapient',
+        scientificName: 'Homo sapiens',
+        taxonomicHierarchy: {
+          domainRank: 'Eukaryota (Sinh vật nhân thực)',
+          kingdom: 'Animalia (Giới Động vật)',
+          phylum: 'Chordata (Ngành Có dây sống)',
+          classRank: 'Mammalia (Lớp Động vật có vú)',
+          orderRank: 'Primates (Bộ Linh trưởng)',
+          familyRank: 'Hominidae (Họ Người)',
+          genusRank: 'Homo (Chi Người)',
+          speciesRank: 'Homo sapiens (Con người hiện đại)',
+        },
+        demographics: {
+          size: 7800000000,
+          densityPerCell: 120.5,
+          sexRatio: { malePct: 50, femalePct: 50 },
+          ageStructure: { preReproductivePct: 25, reproductivePct: 55, postReproductivePct: 20 },
+          distributionPattern: 'clumped',
+          distributionLabel: 'Phân bố theo nhóm (Đô thị hóa & quần cư)',
+          cellularGradeDetail: {
+            cellType: 'eukaryote',
+            cellTypeLabel: 'Tế bào nhân thực',
+            specialization: 'Hàng nghìn tỷ tế bào nhân thực chuyên hóa sâu (thần kinh, cơ, máu, biểu mô)',
+          },
+          socialTraits: {
+            isHumanoidOrSapient: true,
+            socialOrganization: 'Tổ chức xã hội cấp tiến: Gia đình, thị tộc, đô thị hóa & pháp luật',
+            toolUseAndTechnology: 'Chế tác công cụ phức tạp, làm chủ năng lượng & khoa học kỹ thuật',
+            culturalTransmission: 'Ngôn ngữ, chữ viết, giáo dục truyền đạt tri thức và đạo đức qua các thế hệ',
+            environmentalModification: 'Khả năng cải tạo môi trường sống chủ động: Y tế, nông nghiệp, kiến trúc',
+          },
+        },
+      },
+    ]
+
+    render(<SpeciesCardsDock speciesSummaries={testList} />)
+    fireEvent.click(screen.getByText(/Chuỗi Thức Ăn & Phân Loại Sinh Vật \(1\)/))
+
+    // Click 'Phân Loại Học & Quần Thể' view button
+    const taxonomyBtn = screen.getByRole('button', { name: /Phân Loại Học & Quần Thể/i })
+    fireEvent.click(taxonomyBtn)
+
+    // Check 4 Levels of Organization
+    expect(screen.getByText(/4 Cấp Độ Tổ Chức Sinh Học \(Từ Tế Bào Đến Loài\)/)).toBeInTheDocument()
+    expect(screen.getByText(/Tế Bào \(Đơn vị cấu tạo & chức năng/)).toBeInTheDocument()
+    expect(screen.getByText(/Loài & Quần Thể \(5 Đặc trưng cơ bản\)/)).toBeInTheDocument()
+
+    // Check 7-Rank Linnaean Hierarchy from Mammalia to Homo sapiens
+    expect(screen.getByText(/Thang Phân Loại Sinh Học Linnaean \(Từ Giới Đến Con Người\)/)).toBeInTheDocument()
+    expect(screen.getByText('Animalia')).toBeInTheDocument()
+    expect(screen.getByText('Chordata')).toBeInTheDocument()
+    expect(screen.getByText('Mammalia')).toBeInTheDocument()
+    expect(screen.getByText('Primates')).toBeInTheDocument()
+    expect(screen.getByText('Hominidae')).toBeInTheDocument()
+    expect(screen.getByText('Homo')).toBeInTheDocument()
+    expect(screen.getByText('H. sapiens')).toBeInTheDocument()
+
+    // Check Human population social characteristics
+    expect(screen.getByText(/Quần Thể Người \(Homo sapiens\) & Các Đặc Điểm Xã Hội Vượt Trội/)).toBeInTheDocument()
+    expect(screen.getByText(/Tổ chức xã hội:/)).toBeInTheDocument()
+    expect(screen.getByText(/Công cụ & Kỹ thuật:/)).toBeInTheDocument()
+    expect(screen.getByText(/Văn hóa & Giáo dục:/)).toBeInTheDocument()
+    expect(screen.getByText(/Cải tạo môi trường:/)).toBeInTheDocument()
+
+    // Check individual living species demographics display
+    expect(screen.getByText('Con Người Hiện Đại')).toBeInTheDocument()
+    expect(screen.getByText(/120.5/)).toBeInTheDocument()
+    expect(screen.getByText(/50% ♂/)).toBeInTheDocument()
+    expect(screen.getByText(/50% ♀/)).toBeInTheDocument()
+    expect(screen.getByText(/Non:/)).toBeInTheDocument()
+  })
 })

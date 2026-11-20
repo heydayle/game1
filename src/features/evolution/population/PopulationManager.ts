@@ -1,25 +1,26 @@
 import { SeededRNG } from '../../../shared/utils/seeded-rng.js'
+import { DEFAULT_PERTURBATIONS } from '../../disasters/constants.js'
+import type { EnvironmentalPerturbations } from '../../disasters/types.js'
+import { BiomeGridGenerator } from '../../environment/climate/BiomeGridGenerator.js'
+import type { BiomeCell, BiomeCellSummary } from '../../environment/climate/types.js'
 import type { PlanetConfig } from '../../genesis/types/genesis.js'
+import type {
+  SerializedOrganism,
+  SerializedPrebioticState,
+  SerializedSpecies,
+} from '../../persistence/types.js'
+import { DEFAULT_PREBIOTIC_STATE, PrebioticEngine } from '../abiogenesis/PrebioticEngine.js'
+import type { PrebioticState } from '../abiogenesis/types.js'
 import { GeneExpression } from '../genetics/Gene.js'
 import type { SpeciesSummary } from '../genetics/types.js'
 import { MutationEngine } from '../mutation/MutationEngine.js'
 import { RecombinationEngine } from '../reproduction/RecombinationEngine.js'
 import { SelectionEngine, type EnvironmentalContext } from '../selection/SelectionEngine.js'
-import { BiomeGridGenerator } from '../../environment/climate/BiomeGridGenerator.js'
-import type { BiomeCell, BiomeCellSummary } from '../../environment/climate/types.js'
-import type { EnvironmentalPerturbations } from '../../disasters/types.js'
-import { DEFAULT_PERTURBATIONS } from '../../disasters/constants.js'
-import { PrebioticEngine, DEFAULT_PREBIOTIC_STATE } from '../abiogenesis/PrebioticEngine.js'
-import type { PrebioticState } from '../abiogenesis/types.js'
+import { TaxonomyEngine } from '../taxonomy/TaxonomyEngine.js'
+import { UniversalTaxonomyEngine } from '../taxonomy/UniversalTaxonomyEngine.js'
+import type { SpeciationEvent } from '../taxonomy/types.js'
 import { Organism } from './Organism.js'
 import { Species } from './Species.js'
-import type { SpeciationEvent } from '../taxonomy/types.js'
-import { TaxonomyEngine } from '../taxonomy/TaxonomyEngine.js'
-import type {
-  SerializedSpecies,
-  SerializedOrganism,
-  SerializedPrebioticState,
-} from '../../persistence/types.js'
 
 export const SPECIATION_DISTANCE_THRESHOLD = 0.22
 /** Infinite theoretical capacity — no artificial population ceiling */
@@ -49,6 +50,7 @@ export class PopulationManager {
   private currentGeneration = 0
   private planetConfig: PlanetConfig | null = null
   private pendingSpeciationEvents: SpeciationEvent[] = []
+  private totalExtinctSpeciesCount = 0
 
   private recordSpeciationEvent(event: SpeciationEvent): void {
     this.pendingSpeciationEvents.push(event)
@@ -66,6 +68,7 @@ export class PopulationManager {
     this.pendingSpeciationEvents = []
     this.organisms = []
     this.speciesMap.clear()
+    this.totalExtinctSpeciesCount = 0
     this.nextOrganismId = 1
     this.nextSpeciesId = 1
     this.currentGeneration = 0
@@ -86,6 +89,7 @@ export class PopulationManager {
   ): void {
     this.organisms = []
     this.speciesMap.clear()
+    this.totalExtinctSpeciesCount = 0
     this.nextOrganismId = 1
     this.nextSpeciesId = 1
     this.currentGeneration = 1
@@ -405,6 +409,8 @@ export class PopulationManager {
       }
     } else if (this.prebioticEngine.getStage() === 'inhabited') {
       if (this.organisms.length === 0) {
+        this.totalExtinctSpeciesCount += this.speciesMap.size
+        this.speciesMap.clear()
         this.prebioticEngine.setStage('extinct')
         // Initialize post-extinction organic soup residue
         this.prebioticEngine.setOrganicComplexity(0.05)
@@ -463,7 +469,7 @@ export class PopulationManager {
     // Pre-calculate local trophic biomass per cell for Food Chain interactions
     const cellTrophicBiomass = new Map<
       number,
-      { producer: number; herbivore: number; prey: number; carnivore: number }
+      { producer: number; flora: number; herbivore: number; prey: number; carnivore: number }
     >()
 
     let globalProducers = 0
@@ -480,6 +486,7 @@ export class PopulationManager {
       const role = sp?.traits.trophicRole ?? 'producer'
       const tier = sp?.traits.tier ?? 'prokaryote'
       const domain = sp?.traits.domain ?? 'microbe'
+      const tLevel = sp?.traits.trophicLevel ?? 1
 
       if (role === 'producer') {
         globalProducers += org.cohortWeight
@@ -490,6 +497,10 @@ export class PopulationManager {
         globalPrey += org.cohortWeight
       } else if (role === 'carnivore') {
         globalCarnivores += org.cohortWeight
+        // Secondary & tertiary carnivores (Bậc 3 & 4) cũng đóng vai trò là con mồi cho động vật săn mồi đỉnh chuỗi (Bậc 4 & 5)
+        if (tLevel >= 3 && tLevel < 5) {
+          globalPrey += org.cohortWeight * 0.8
+        }
       }
 
       if (
@@ -520,19 +531,27 @@ export class PopulationManager {
 
       const entry = cellTrophicBiomass.get(org.cellId) ?? {
         producer: 0,
+        flora: 0,
         herbivore: 0,
         prey: 0,
         carnivore: 0,
       }
       if (role === 'producer') {
         entry.producer += org.cohortWeight
-      } else if (role === 'herbivore') {
+      }
+      if (domain === 'flora') {
+        entry.flora += org.cohortWeight
+      }
+      if (role === 'herbivore') {
         entry.herbivore += org.cohortWeight
         entry.prey += org.cohortWeight
       } else if (role === 'omnivore') {
         entry.prey += org.cohortWeight
       } else if (role === 'carnivore') {
         entry.carnivore += org.cohortWeight
+        if (tLevel >= 3 && tLevel < 5) {
+          entry.prey += org.cohortWeight * 0.8
+        }
       }
       cellTrophicBiomass.set(org.cellId, entry)
     }
@@ -572,12 +591,12 @@ export class PopulationManager {
         tier === 'prokaryote' || tier === 'unicellular'
           ? 0.45
           : tier === 'eukaryote'
-          ? 0.55
-          : tier === 'simple_multicellular'
-          ? 0.70
-          : tier === 'differentiated_tissue'
-          ? 0.85
-          : 1.0
+            ? 0.55
+            : tier === 'simple_multicellular'
+              ? 0.70
+              : tier === 'differentiated_tissue'
+                ? 0.85
+                : 1.0
       organism.energy -= organism.phenotype.metabolicRate * metabolicFactor
       if (organism.energy <= 0) {
         continue // Starvation
@@ -599,12 +618,12 @@ export class PopulationManager {
         selectionPressure: Math.min(
           1.0,
           planetConfig.environmentalConditions.selectionPressure *
-            (1.0 + perturbations.atmosphericDust * 0.4)
+          (1.0 + perturbations.atmosphericDust * 0.4)
         ),
         resourceAvailability: Math.min(
           1.0,
           (localCell.carryingCapacity / 80.0) *
-            Math.max(0.1, 1.0 - perturbations.atmosphericDust)
+          Math.max(0.1, 1.0 - perturbations.atmosphericDust)
         ),
       }
 
@@ -631,53 +650,146 @@ export class PopulationManager {
       // Calculate food chain energy intake based on trophic role
       const trophicData = cellTrophicBiomass.get(organism.cellId) ?? {
         producer: 0,
+        flora: 0,
         herbivore: 0,
         prey: 0,
         carnivore: 0,
       }
 
+      const cellNeighbors = this.cellAdjacency[organism.cellId] ?? []
+      const mobility = organism.phenotype.mobility
+
       let trophicFoodMultiplier = 1.0
       if (role === 'producer') {
         trophicFoodMultiplier = 1.2 * env.resourceAvailability
       } else if (role === 'herbivore') {
-        if (trophicData.producer <= 0 && globalProducers <= 0) {
-          // Total collapse of producer food chain: severe starvation and mortality
-          trophicFoodMultiplier = 0.05
-          survivalProb *= 0.15
-          organism.energy = Math.max(0, organism.energy - 2.0)
-          organism.fitness = Math.max(0.01, organism.fitness * 0.3)
-        } else if (trophicData.producer <= 0) {
-          trophicFoodMultiplier = 0.3
-          survivalProb *= 0.5
+        const isFaunaHerbivore =
+          domain === 'fauna' ||
+          tier === 'primitive_animal' ||
+          tier === 'complex_bilaterian' ||
+          tier === 'complex_multicellular' ||
+          tier === 'advanced' ||
+          tier === 'sapient'
+
+        // 1. Food source determination:
+        // Metazoan animal herbivores strictly feed on macroscopic vegetation / flora.
+        // If all flora is extinct, animals cannot graze on microscopic deep-sea bacteria!
+        // Unicellular / early micro-herbivores can graze on generic autotrophic microbes.
+        let availableFood = 0
+        if (isFaunaHerbivore) {
+          if (globalFloraBiomass <= 0) {
+            availableFood = 0 // Plants are completely extinct!
+          } else {
+            availableFood = trophicData.flora
+            for (const nId of cellNeighbors) {
+              availableFood += (cellTrophicBiomass.get(nId)?.flora ?? 0) * (mobility * 0.4)
+            }
+          }
         } else {
-          const ratio = trophicData.producer / Math.max(15, trophicData.herbivore)
-          trophicFoodMultiplier = Math.min(1.5, Math.max(0.4, 0.4 + ratio * 0.8))
-          if (ratio < 0.3) survivalProb *= (0.5 + ratio * 1.5)
+          if (globalProducers <= 0) {
+            availableFood = 0
+          } else {
+            availableFood = trophicData.producer
+            for (const nId of cellNeighbors) {
+              availableFood += (cellTrophicBiomass.get(nId)?.producer ?? 0) * (mobility * 0.4)
+            }
+          }
+        }
+
+        // 2. Trophic carrying capacity & starvation:
+        if (availableFood <= 0) {
+          // Zero food available: catastrophic famine & collapse
+          trophicFoodMultiplier = 0.0
+          survivalProb *= organism.energy > 3.0 ? 0.35 : 0.05
+          organism.energy = Math.max(0, organism.energy - 3.5)
+          organism.fitness = Math.max(0.001, organism.fitness * 0.05)
+        } else {
+          const competingBiomass = Math.max(1, trophicData.herbivore)
+          const foodRatio = availableFood / competingBiomass
+
+          if (foodRatio >= 3.0) {
+            // Abundant food
+            trophicFoodMultiplier = Math.min(1.5, 1.0 + foodRatio * 0.05)
+          } else if (foodRatio >= 1.0) {
+            // Adequate food
+            trophicFoodMultiplier = 0.7 + (foodRatio - 1.0) * 0.15
+          } else if (foodRatio >= 0.25) {
+            // Overgrazing / food scarcity
+            trophicFoodMultiplier = Math.max(0.1, foodRatio * 0.6)
+            survivalProb *= (0.3 + foodRatio * 0.7)
+          } else {
+            // Acute famine from extreme overpopulation relative to food
+            trophicFoodMultiplier = Math.max(0.02, foodRatio * 0.5)
+            survivalProb *= Math.max(0.05, foodRatio * 2.5)
+            organism.energy = Math.max(0, organism.energy - 2.0)
+            organism.fitness = Math.max(0.01, organism.fitness * 0.2)
+          }
         }
       } else if (role === 'carnivore') {
-        if (trophicData.prey <= 0 && globalPrey <= 0) {
-          // Total collapse of prey: carnivores starve
-          trophicFoodMultiplier = 0.05
-          survivalProb *= 0.1
-          organism.energy = Math.max(0, organism.energy - 3.0)
-          organism.fitness = Math.max(0.01, organism.fitness * 0.2)
-        } else if (trophicData.prey <= 0) {
-          trophicFoodMultiplier = 0.25
-          survivalProb *= 0.45
+        let availablePrey = 0
+        if (globalPrey <= 0) {
+          availablePrey = 0
         } else {
-          const ratio = trophicData.prey / Math.max(5, trophicData.carnivore)
-          trophicFoodMultiplier = Math.min(1.6, Math.max(0.3, 0.3 + (ratio / (1.0 + ratio)) * 1.3))
-          if (ratio < 0.3) survivalProb *= (0.4 + ratio * 1.5)
+          availablePrey = trophicData.prey
+          for (const nId of cellNeighbors) {
+            availablePrey += (cellTrophicBiomass.get(nId)?.prey ?? 0) * (mobility * 0.4)
+          }
+        }
+
+        if (availablePrey <= 0) {
+          // Total collapse of prey: carnivores starve
+          trophicFoodMultiplier = 0.0
+          survivalProb *= organism.energy > 3.0 ? 0.35 : 0.05
+          organism.energy = Math.max(0, organism.energy - 3.5)
+          organism.fitness = Math.max(0.001, organism.fitness * 0.05)
+        } else {
+          const competingCarnivores = Math.max(1, trophicData.carnivore)
+          const preyRatio = availablePrey / competingCarnivores
+
+          if (preyRatio >= 3.0) {
+            trophicFoodMultiplier = Math.min(1.6, 1.0 + preyRatio * 0.05)
+          } else if (preyRatio >= 1.0) {
+            trophicFoodMultiplier = 0.7 + (preyRatio - 1.0) * 0.15
+          } else if (preyRatio >= 0.25) {
+            trophicFoodMultiplier = Math.max(0.1, preyRatio * 0.6)
+            survivalProb *= (0.3 + preyRatio * 0.7)
+          } else {
+            trophicFoodMultiplier = Math.max(0.02, preyRatio * 0.5)
+            survivalProb *= Math.max(0.05, preyRatio * 2.5)
+            organism.energy = Math.max(0, organism.energy - 2.0)
+            organism.fitness = Math.max(0.01, organism.fitness * 0.2)
+          }
         }
       } else if (role === 'omnivore') {
-        if (globalProducers <= 0 && globalPrey <= 0) {
-          trophicFoodMultiplier = 0.1
-          survivalProb *= 0.15
+        let availablePlant = 0
+        if (domain === 'fauna' && globalFloraBiomass <= 0) {
+          availablePlant = 0
+        } else if (globalProducers > 0) {
+          availablePlant = trophicData.producer
+          for (const nId of cellNeighbors) {
+            availablePlant += (cellTrophicBiomass.get(nId)?.producer ?? 0) * (mobility * 0.3)
+          }
+        }
+
+        let availablePrey = 0
+        if (globalPrey > 0) {
+          availablePrey = trophicData.prey
+          for (const nId of cellNeighbors) {
+            availablePrey += (cellTrophicBiomass.get(nId)?.prey ?? 0) * (mobility * 0.3)
+          }
+        }
+
+        if (availablePlant <= 0 && availablePrey <= 0) {
+          trophicFoodMultiplier = 0.0
+          survivalProb *= organism.energy > 3.0 ? 0.35 : 0.05
+          organism.energy = Math.max(0, organism.energy - 3.5)
+          organism.fitness = Math.max(0.001, organism.fitness * 0.05)
         } else {
-          const plantRatio = trophicData.producer > 0 ? trophicData.producer / 20.0 : 0.2
-          const preyRatio = trophicData.prey > 0 ? trophicData.prey / 10.0 : 0.2
-          trophicFoodMultiplier = Math.min(1.3, Math.max(0.3, 0.4 + plantRatio * 0.4 + preyRatio * 0.4))
-          if (trophicData.producer <= 0 && trophicData.prey <= 0) survivalProb *= 0.4
+          const totalFood = availablePlant + availablePrey
+          const plantRatio = availablePlant > 0 ? availablePlant / 20.0 : 0.0
+          const preyRatio = availablePrey > 0 ? availablePrey / 10.0 : 0.0
+          trophicFoodMultiplier = Math.min(1.4, Math.max(0.1, 0.3 + plantRatio * 0.4 + preyRatio * 0.4))
+          if (totalFood < 5) survivalProb *= 0.4
         }
       }
 
@@ -716,10 +828,10 @@ export class PopulationManager {
         tier === 'prokaryote' || tier === 'unicellular'
           ? 2.2
           : tier === 'eukaryote'
-          ? 2.1
-          : tier === 'simple_multicellular'
-          ? 2.0
-          : 1.8
+            ? 2.1
+            : tier === 'simple_multicellular'
+              ? 2.0
+              : 1.8
       const energyIntake =
         baseIntake *
         env.resourceAvailability *
@@ -800,14 +912,76 @@ export class PopulationManager {
         const tierA = spA?.traits.tier ?? 'prokaryote'
         const domainA = spA?.traits.domain ?? 'microbe'
 
-        // Strict food chain & ecological bedrock compliance:
-        // - Severe physiological distress: organisms failing environmental viability cannot reproduce
-        // - Herbivores require producers, carnivores require prey
-        // - Bilaterians, Advanced & Sapient species require underlying lower-tier biomass
-        // - Plants strictly depend on foundational microbial biomass
+        const isFaunaHerbivore =
+          roleA === 'herbivore' &&
+          (domainA === 'fauna' ||
+            tierA === 'primitive_animal' ||
+            tierA === 'complex_bilaterian' ||
+            tierA === 'complex_multicellular' ||
+            tierA === 'advanced' ||
+            tierA === 'sapient')
+
+        // Energy cost of reproduction (microbes divide efficiently)
+        const reproCost =
+          tierA === 'prokaryote' || tierA === 'unicellular'
+            ? 1.8
+            : tierA === 'eukaryote'
+              ? 1.9
+              : tierA === 'simple_multicellular'
+                ? 2.1
+                : 2.5
+
+        // Starving parents cannot reproduce:
+        if (parentA.energy < reproCost + 1.5) continue
         if (parentA.fitness < 0.2) continue
-        if (roleA === 'herbivore' && globalProducers <= 0) continue
-        if (roleA === 'carnivore' && globalPrey <= 0) continue
+
+        // Strict food chain & ecological bedrock compliance:
+        // 1. Herbivores strictly require living plant / producer biomass
+        if (roleA === 'herbivore') {
+          if (globalProducers <= 0) continue
+          if (isFaunaHerbivore && globalFloraBiomass <= 0) continue
+
+          const localCellFood = isFaunaHerbivore
+            ? (cellTrophicBiomass.get(cellId)?.flora ?? 0)
+            : (cellTrophicBiomass.get(cellId)?.producer ?? 0)
+          let neighborCellFood = 0
+          for (const nId of cellNeighbors) {
+            neighborCellFood += isFaunaHerbivore
+              ? (cellTrophicBiomass.get(nId)?.flora ?? 0)
+              : (cellTrophicBiomass.get(nId)?.producer ?? 0)
+          }
+          const totalLocalFood =
+            localCellFood + neighborCellFood * (parentA.phenotype.mobility * 0.4)
+          if (totalLocalFood <= 0) continue // Cannot reproduce in a foodless cell!
+          const localHerbBiomass = cellTrophicBiomass.get(cellId)?.herbivore ?? 1
+          if (totalLocalFood / localHerbBiomass < 0.2) continue // Severe overgrazing/famine suppresses breeding
+        }
+
+        // 2. Carnivores strictly require prey
+        if (roleA === 'carnivore') {
+          if (globalPrey <= 0) continue
+          const localPrey = cellTrophicBiomass.get(cellId)?.prey ?? 0
+          let neighborPrey = 0
+          for (const nId of cellNeighbors) {
+            neighborPrey += cellTrophicBiomass.get(nId)?.prey ?? 0
+          }
+          const totalLocalPrey =
+            localPrey + neighborPrey * (parentA.phenotype.mobility * 0.4)
+          if (totalLocalPrey <= 0) continue
+          const localCarnBiomass = cellTrophicBiomass.get(cellId)?.carnivore ?? 1
+          if (totalLocalPrey / localCarnBiomass < 0.2) continue
+        }
+
+        // 3. Omnivores require at least one food source
+        if (roleA === 'omnivore') {
+          if (globalProducers <= 0 && globalPrey <= 0) continue
+          const localFood =
+            (cellTrophicBiomass.get(cellId)?.producer ?? 0) +
+            (cellTrophicBiomass.get(cellId)?.prey ?? 0)
+          if (localFood <= 0) continue
+        }
+
+        // 4. Higher-tier organisms require lower-tier ecological biomass pyramid
         if (
           (tierA === 'complex_bilaterian' ||
             tierA === 'complex_multicellular' ||
@@ -850,15 +1024,10 @@ export class PopulationManager {
           parentB = parentA
         }
 
-        // Energy cost of reproduction (microbes divide efficiently)
-        const reproCost =
-          tierA === 'prokaryote' || tierA === 'unicellular'
-            ? 1.8
-            : tierA === 'eukaryote'
-            ? 1.9
-            : tierA === 'simple_multicellular'
-            ? 2.1
-            : 2.5
+        if (parentB !== parentA && parentB.energy < reproCost + 1.5) {
+          continue // Mate is too malnourished to breed
+        }
+
         parentA.energy -= reproCost
         if (parentB !== parentA) parentB.energy -= reproCost
 
@@ -878,15 +1047,43 @@ export class PopulationManager {
           offspringWeight = Math.max(1, Math.floor(offspringWeight * 1.25))
         }
 
+        // Carrying capacity & trophic food cap on offspring weight
+        const currentCell = this.biomeGrid[cellId]
+        const cellCap = currentCell?.carryingCapacity ?? 80
+        const currentCellBiomass = cellTrophicBiomass.get(cellId)
+        const cellTotal =
+          (currentCellBiomass?.producer ?? 0) +
+          (currentCellBiomass?.herbivore ?? 0) +
+          (currentCellBiomass?.carnivore ?? 0)
+
+        // When cell is saturated beyond carrying capacity, suppress offspring weight
+        if (cellTotal > cellCap) {
+          const crowdingFactor = Math.max(0.1, cellCap / cellTotal)
+          offspringWeight = Math.max(1, Math.floor(offspringWeight * crowdingFactor))
+        }
+
+        // Consumers cannot spawn more offspring weight than their food supply can support
+        if (roleA === 'herbivore') {
+          const localFood = isFaunaHerbivore
+            ? (cellTrophicBiomass.get(cellId)?.flora ?? 0)
+            : (cellTrophicBiomass.get(cellId)?.producer ?? 0)
+          const maxFromFood = Math.max(1, Math.floor(localFood * 0.35))
+          offspringWeight = Math.min(offspringWeight, maxFromFood)
+        } else if (roleA === 'carnivore') {
+          const localPrey = cellTrophicBiomass.get(cellId)?.prey ?? 0
+          const maxFromPrey = Math.max(1, Math.floor(localPrey * 0.35))
+          offspringWeight = Math.min(offspringWeight, maxFromPrey)
+        }
+
         // Mutation config per evolutionary tier
         const baseMutationRate =
           tierA === 'prokaryote' || tierA === 'unicellular'
             ? 0.12
             : tierA === 'eukaryote'
-            ? 0.10
-            : tierA === 'simple_multicellular'
-            ? 0.08
-            : 0.06
+              ? 0.10
+              : tierA === 'simple_multicellular'
+                ? 0.08
+                : 0.06
         const localMutationConfig = {
           baseMutationRate,
           mutationRateMultiplier:
@@ -925,9 +1122,9 @@ export class PopulationManager {
           // Microorganisms diversify rapidly with a lower speciation distance threshold
           const speciationThreshold =
             tierA === 'prokaryote' ||
-            tierA === 'unicellular' ||
-            tierA === 'eukaryote' ||
-            tierA === 'simple_multicellular'
+              tierA === 'unicellular' ||
+              tierA === 'eukaryote' ||
+              tierA === 'simple_multicellular'
               ? 0.12
               : SPECIATION_DISTANCE_THRESHOLD
 
@@ -1022,12 +1219,14 @@ export class PopulationManager {
     }
 
     // 4. Extinction & Tier Ascension Detection
+    const extinctSpeciesIds: string[] = []
     for (const species of this.speciesMap.values()) {
       if (!species.isExtinct) {
         const remaining = this.organisms.filter((o) => o.speciesId === species.id)
         if (remaining.length === 0) {
           species.isExtinct = true
           species.extinctionRotation = rotation
+          extinctSpeciesIds.push(species.id)
         } else {
           // Check for evolutionary tier ascension as generations accumulate
           const ascended = species.updateTraits(this.planetConfig ?? planetConfig)
@@ -1065,6 +1264,12 @@ export class PopulationManager {
           }
         }
       }
+    }
+
+    // Purge extinct species completely to eliminate memory leak, heavy trait calculations, and UI lag
+    for (const id of extinctSpeciesIds) {
+      this.totalExtinctSpeciesCount++
+      this.speciesMap.delete(id)
     }
 
     // 5. Update Biome Densities
@@ -1258,6 +1463,10 @@ export class PopulationManager {
 
     this.speciesMap.clear()
     for (const s of state.species) {
+      if (s.isExtinct) {
+        this.totalExtinctSpeciesCount++
+        continue
+      }
       const sp = new Species(s.id, s.name, s.foundingGenotype, s.emergenceRotation, 0, s.color)
       sp.isExtinct = s.isExtinct
       sp.extinctionRotation = s.extinctionRotation
@@ -1315,12 +1524,13 @@ export class PopulationManager {
       totalPop > 0 ? Number((weightedFitness / totalPop).toFixed(3)) : 0
 
     let activeSpeciesCount = 0
-    let extinctSpeciesCount = 0
+    const extinctSpeciesCount = this.totalExtinctSpeciesCount
     const speciesSummaries: SpeciesSummary[] = []
 
     // Build Trophic Food Web Links
     const activeSpecies = Array.from(this.speciesMap.values()).filter((s) => !s.isExtinct)
     const producerSpecies = activeSpecies.filter((s) => s.traits.trophicRole === 'producer')
+    const floraSpecies = activeSpecies.filter((s) => s.traits.domain === 'flora')
     const herbivoreSpecies = activeSpecies.filter(
       (s) => s.traits.trophicRole === 'herbivore' || s.traits.trophicRole === 'omnivore'
     )
@@ -1329,53 +1539,136 @@ export class PopulationManager {
     )
 
     for (const species of this.speciesMap.values()) {
-      const living = this.organisms.filter((o) => o.speciesId === species.id)
       if (species.isExtinct) {
-        extinctSpeciesCount++
-      } else {
-        activeSpeciesCount++
+        continue
       }
+      const living = this.organisms.filter((o) => o.speciesId === species.id)
+      if (living.length === 0) {
+        continue
+      }
+      activeSpeciesCount++
 
       const summary = species.toSummary(living)
       const role = species.traits.trophicRole
+
+      // Build universal trait profile (runs alongside legacy traits — does not replace them yet)
+      const traitProfile = this.planetConfig
+        ? UniversalTaxonomyEngine.evaluateTraitProfile(
+          species.foundingGenotype,
+          this.planetConfig,
+          species.id
+        )
+        : undefined
 
       let preyIds: string[] = []
       let predatorIds: string[] = []
       let foodChainSummary = 'Quang hợp và hóa năng'
 
+      const trophicLevel = species.traits.trophicLevel ?? 1
+
       if (role === 'herbivore') {
-        preyIds = producerSpecies.map((p) => p.id)
+        const isFauna =
+          species.traits.domain === 'fauna' ||
+          species.traits.tier === 'primitive_animal' ||
+          species.traits.tier === 'complex_bilaterian' ||
+          species.traits.tier === 'complex_multicellular' ||
+          species.traits.tier === 'advanced' ||
+          species.traits.tier === 'sapient'
+
+        const relevantProducers =
+          isFauna && floraSpecies.length > 0 ? floraSpecies : producerSpecies
+
+        preyIds = relevantProducers.map((p) => p.id)
         predatorIds = carnivoreSpecies.map((c) => c.id)
-        foodChainSummary =
-          producerSpecies.length > 0
-            ? `Ăn: ${producerSpecies.slice(0, 2).map((p) => p.name).join(', ')}`
-            : 'Thiếu thảm thực vật!'
+
+        if (isFauna && floraSpecies.length === 0) {
+          foodChainSummary = 'Thảm thực vật đã tuyệt chủng - Đang chết đói!'
+        } else if (producerSpecies.length === 0) {
+          foodChainSummary = 'Thiếu thảm thực vật/tảo!'
+        } else {
+          foodChainSummary = `Ăn: ${relevantProducers.slice(0, 2).map((p) => p.name).join(', ')}`
+        }
       } else if (role === 'carnivore') {
-        preyIds = herbivoreSpecies.map((h) => h.id)
-        predatorIds = []
-        foodChainSummary =
-          herbivoreSpecies.length > 0
-            ? `Săn: ${herbivoreSpecies.slice(0, 2).map((h) => h.name).join(', ')}`
-            : 'Thiếu con mồi!'
+        if (trophicLevel >= 5) {
+          // Apex Mammal / Sapient (Bậc 5): Săn cá lớn, hải cẩu, động vật ăn cỏ bậc 2-4
+          const targetPrey = activeSpecies.filter(
+            (s) =>
+              (s.traits.trophicLevel ?? 1) >= 2 &&
+              (s.traits.trophicLevel ?? 1) < 5 &&
+              s.id !== species.id
+          )
+          preyIds = targetPrey.map((p) => p.id)
+          predatorIds = []
+          foodChainSummary =
+            targetPrey.length > 0
+              ? `Đỉnh chuỗi (Apex): Săn ${targetPrey.slice(0, 2).map((h) => h.name).join(', ')}`
+              : 'Đỉnh chuỗi thức ăn: Thiếu con mồi!'
+        } else if (trophicLevel === 4) {
+          // Tertiary Carnivore (Bậc 4 - Cá lớn, Chim ăn cá, Bò sát): Săn cá nhỏ / sinh vật bậc 2-3
+          const targetPrey = activeSpecies.filter(
+            (s) =>
+              (s.traits.trophicLevel ?? 1) >= 2 &&
+              (s.traits.trophicLevel ?? 1) <= 3 &&
+              s.id !== species.id
+          )
+          preyIds = targetPrey.map((p) => p.id)
+          predatorIds = carnivoreSpecies
+            .filter((c) => (c.traits.trophicLevel ?? 3) >= 5)
+            .map((c) => c.id)
+          foodChainSummary =
+            targetPrey.length > 0
+              ? `Săn cá nhỏ & bậc 2-3: ${targetPrey.slice(0, 2).map((h) => h.name).join(', ')}`
+              : 'Thiếu con mồi cá nhỏ / bậc 2-3!'
+        } else {
+          // Secondary Carnivore (Bậc 3 - Cá nhỏ, Nòng nọc, Ruột khoang, Côn trùng): Săn giáp xác / động vật bậc 2
+          preyIds = herbivoreSpecies.map((h) => h.id)
+          predatorIds = carnivoreSpecies
+            .filter((c) => (c.traits.trophicLevel ?? 3) >= 4)
+            .map((c) => c.id)
+          foodChainSummary =
+            herbivoreSpecies.length > 0
+              ? `Săn sinh vật bậc 2: ${herbivoreSpecies.slice(0, 2).map((h) => h.name).join(', ')}`
+              : 'Thiếu con mồi giáp xác / ấu trùng!'
+        }
       } else if (role === 'omnivore') {
         preyIds = [
           ...producerSpecies.map((p) => p.id),
           ...herbivoreSpecies.filter((h) => h.id !== species.id).map((h) => h.id),
         ]
-        predatorIds = carnivoreSpecies.filter((c) => c.id !== species.id).map((c) => c.id)
-        foodChainSummary = 'Tiêu thụ thực vật & con mồi'
+        predatorIds = carnivoreSpecies
+          .filter((c) => c.id !== species.id && (c.traits.trophicLevel ?? 3) > trophicLevel)
+          .map((c) => c.id)
+        foodChainSummary =
+          trophicLevel >= 5
+            ? 'Động vật ăn tạp đỉnh chuỗi: Tiêu thụ cá lớn, thịt & thực vật'
+            : 'Tiêu thụ thực vật & con mồi'
       } else if (role === 'producer') {
         preyIds = []
         predatorIds = herbivoreSpecies.map((h) => h.id)
-        foodChainSummary = 'Quang năng sao & khoáng chất'
+        foodChainSummary = 'Quang năng sao, CO2 & khoáng chất (Mở đầu chuỗi thức ăn)'
       } else {
         preyIds = []
         predatorIds = []
-        foodChainSummary = 'Phân giải xác sinh khối hữu cơ'
+        foodChainSummary = 'Phân giải xác sinh khối & chất thải từ mọi mắt xích thành chất vô cơ'
       }
 
       let hungerState: 'satiated' | 'hungry' | 'starving' = 'satiated'
-      if (living.length > 0) {
+      const isFaunaHerbivore =
+        role === 'herbivore' &&
+        (species.traits.domain === 'fauna' ||
+          species.traits.tier === 'primitive_animal' ||
+          species.traits.tier === 'complex_bilaterian' ||
+          species.traits.tier === 'complex_multicellular' ||
+          species.traits.tier === 'advanced' ||
+          species.traits.tier === 'sapient')
+
+      if (isFaunaHerbivore && floraSpecies.length === 0) {
+        hungerState = 'starving'
+      } else if (role === 'herbivore' && producerSpecies.length === 0) {
+        hungerState = 'starving'
+      } else if (role === 'carnivore' && herbivoreSpecies.length === 0) {
+        hungerState = 'starving'
+      } else if (living.length > 0) {
         const totalEnergy = living.reduce((acc, o) => acc + o.energy * o.cohortWeight, 0)
         const avgEnergy = totalEnergy / Math.max(1, summary.population)
         if (avgEnergy < 3.0) {
@@ -1391,6 +1684,7 @@ export class PopulationManager {
         predatorSpeciesIds: predatorIds,
         hungerState,
         foodChainSummary,
+        traitProfile,
       })
     }
 

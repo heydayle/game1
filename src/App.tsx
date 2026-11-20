@@ -2,27 +2,91 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { SoundFX } from "./features/audio/SoundFXEngine.js";
 import { DisasterControlHUD } from "./features/disasters/components/DisasterControlHUD.js";
+import type { DisasterType } from "./features/disasters/types.js";
 import { BiomeGridGenerator } from "./features/environment/climate/BiomeGridGenerator.js";
-import { SpeciationAlertToast } from "./features/evolution/components/SpeciationAlertToast.js";
 import {
   RightEvolutionDrawer,
   type EvolutionTabType,
 } from "./features/evolution/components/RightEvolutionDrawer.js";
+import {
+  SapientEvolutionLogHUD,
+  type SapientLogEntry,
+} from "./features/evolution/components/SapientEvolutionLogHUD.js";
+import { SpeciationAlertToast } from "./features/evolution/components/SpeciationAlertToast.js";
+import type { BiologicalTraits, EvolutionTier } from "./features/evolution/taxonomy/types.js";
 import { GenesisModal } from "./features/genesis/components/GenesisModal.js";
+import { WelcomeOnboardingModal } from "./features/genesis/components/WelcomeOnboardingModal.js";
+import { ResetDataConfirmationModal } from "./features/persistence/components/ResetDataConfirmationModal.js";
 import { SaveManagerModal } from "./features/persistence/components/SaveManagerModal.js";
 import { useAutoSave } from "./features/persistence/hooks/useAutoSave.js";
 import { AutoSaveService } from "./features/persistence/services/AutoSaveService.js";
 import { Planet } from "./features/planet/components/Planet.js";
 import { PlanetInspectHUD } from "./features/planet/components/PlanetInspectHUD.js";
 import type { PlanetInspectData } from "./features/planet/components/PlanetSurface.js";
-import { SimulationControlsCenterHUD } from "./features/simulation/components/SimulationControlsCenterHUD.js";
 import { KeyboardShortcutsModal } from "./features/simulation/components/KeyboardShortcutsModal.js";
-import { WelcomeOnboardingModal } from "./features/genesis/components/WelcomeOnboardingModal.js";
-import { ResetDataConfirmationModal } from "./features/persistence/components/ResetDataConfirmationModal.js";
+import { SimulationControlsCenterHUD } from "./features/simulation/components/SimulationControlsCenterHUD.js";
 import { useSimulation } from "./features/simulation/hooks/useSimulation.js";
 import { SceneCanvas } from "./rendering/canvas/SceneCanvas.js";
 import { usePlanetStore } from "./stores/planet-store.js";
-import type { DisasterType } from "./features/disasters/types.js";
+
+/**
+ * Determines whether a species qualifies as a modern intelligent higher multicellular organism
+ * ("sinh vật bậc cao thuộc nhánh hiện đại có trí thông minh - là một sinh vật đa bào
+ * giống con người hoặc động vật hiện đại ngày nay").
+ *
+ * Normal organisms (microbes, plants, fungi, simple colonies, sponges, jellyfish, or normal animals)
+ * MUST NEVER trigger the 10-second auto-pause.
+ */
+export function isModernIntelligentHigherOrganism(
+  traits?: BiologicalTraits | null,
+  tier?: EvolutionTier | string | null
+): boolean {
+  if (!traits) {
+    // Không có dữ liệu đặc tính sinh học để xác thực -> coi là bình thường, không tạm dừng
+    return false;
+  }
+
+  // 1. Phải là động vật đa bào (fauna) - TUYỆT ĐỐI KHÔNG PHẢI vi sinh vật, thực vật, hay nấm
+  if (traits.domain !== 'fauna') {
+    return false;
+  }
+
+  // 2. Không chấp nhận các sinh vật bình thường thuộc các cấp bậc thấp hoặc trung bình
+  const actualTier = traits.tier ?? tier;
+  if (
+    actualTier === 'prokaryote' ||
+    actualTier === 'unicellular' ||
+    actualTier === 'eukaryote' ||
+    actualTier === 'simple_multicellular' ||
+    actualTier === 'differentiated_tissue' ||
+    actualTier === 'primitive_animal' ||
+    actualTier === 'complex_bilaterian'
+  ) {
+    return false;
+  }
+
+  // 3. Cơ thể phải thuộc nhánh hiện đại đối xứng hai bên (bilateral)
+  if (traits.bodySymmetry !== 'bilateral') {
+    return false;
+  }
+
+  // 4. Phải là sinh vật đa bào bậc cao có trí thông minh hiện đại:
+  // - Cấp bậc trí tuệ ('sapient')
+  // - Hoặc có hình thái trí tuệ rõ rệt (humanoid giống con người, hoặc động vật hiện đại có trí thông minh như Thủy tộc/Dực nhân/Cryo-Titan)
+  const isSapientTier = actualTier === 'sapient';
+  const hasSapientArchetype = Boolean(traits.sapientArchetype);
+
+  if (!isSapientTier && !hasSapientArchetype) {
+    return false;
+  }
+
+  // 5. Nếu là động vật bậc cao thông thường (advanced) mà không có hình thái trí tuệ, không tạm dừng
+  if (actualTier === 'advanced' && !hasSapientArchetype) {
+    return false;
+  }
+
+  return true;
+}
 
 export default function App() {
   const {
@@ -36,6 +100,7 @@ export default function App() {
     seedPopulation,
     triggerStress,
     triggerDisaster,
+    setAutoDisasters,
     sparkBiogenesis,
     catalyzeChemistry,
     exportState,
@@ -62,6 +127,149 @@ export default function App() {
   const [isHudVisible, setIsHudVisible] = useState(true);
   const [isSoundMuted, setIsSoundMuted] = useState(() => SoundFX.getMuted());
   const isRestoringSaveRef = useRef(false);
+
+  // Sapient Intelligence Emergence Auto-Pause (10s) and Persistent Bottom-Left Log
+  const [sapientLogs, setSapientLogs] = useState<SapientLogEntry[]>([]);
+  const [sapientCountdown, setSapientCountdown] = useState<number | null>(null);
+  const handledSapientSpeciesIdsRef = useRef(new Set<string>());
+  const autoPausedSpeedRef = useRef<number>(1);
+  const isAutoPausedRef = useRef(false);
+  const autoPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Monitor for emergence of intelligent / sapient species
+  useEffect(() => {
+    const events = snapshot.speciationEvents ?? [];
+    let newlyFoundSapientSpecies: SapientLogEntry | null = null;
+
+    for (const ev of events) {
+      const isModernIntelligent = isModernIntelligentHigherOrganism(ev.traits, ev.tier);
+
+      if (isModernIntelligent && !handledSapientSpeciesIdsRef.current.has(ev.speciesId)) {
+        handledSapientSpeciesIdsRef.current.add(ev.speciesId);
+        newlyFoundSapientSpecies = {
+          id: `sapient_log_${ev.speciesId}_${Date.now()}`,
+          speciesId: ev.speciesId,
+          speciesName: ev.speciesName,
+          scientificName: ev.scientificName ?? ev.traits?.scientificName,
+          tier: ev.tier ?? 'sapient',
+          tierLabel: ev.tierLabel ?? 'Sinh vật Trí tuệ Bậc cao',
+          sapientArchetype: ev.traits?.sapientArchetype,
+          sapientLabel: ev.traits?.sapientLabel,
+          color: ev.color,
+          rotation: snapshot.rotations,
+          generation: snapshot.generation,
+          description: ev.description,
+          timestamp: Date.now(),
+        };
+        break;
+      }
+    }
+
+    if (!newlyFoundSapientSpecies && snapshot.speciesSummaries) {
+      for (const sp of snapshot.speciesSummaries) {
+        const isModernIntelligent =
+          !sp.isExtinct &&
+          isModernIntelligentHigherOrganism(sp.biologicalTraits, sp.tier);
+
+        if (isModernIntelligent && !handledSapientSpeciesIdsRef.current.has(sp.id)) {
+          handledSapientSpeciesIdsRef.current.add(sp.id);
+          newlyFoundSapientSpecies = {
+            id: `sapient_log_${sp.id}_${Date.now()}`,
+            speciesId: sp.id,
+            speciesName: sp.name,
+            scientificName: sp.scientificName ?? sp.biologicalTraits?.scientificName,
+            tier: sp.tier ?? 'sapient',
+            tierLabel: sp.tierLabel ?? 'Sinh vật Trí tuệ Bậc cao',
+            sapientArchetype: sp.biologicalTraits?.sapientArchetype,
+            sapientLabel: sp.biologicalTraits?.sapientLabel,
+            color: sp.color,
+            rotation: snapshot.rotations,
+            generation: sp.generation,
+            description: `Khai mở trí năng: Loài ${sp.name} đã tiến hóa thành Sinh vật đa bào bậc cao có trí thông minh hiện đại!`,
+            timestamp: Date.now(),
+          };
+          break;
+        }
+      }
+    }
+
+    if (newlyFoundSapientSpecies) {
+      const entry = newlyFoundSapientSpecies;
+      setSapientLogs((prev) => [entry, ...prev]);
+
+      if (snapshot.status === 'running') {
+        const currentSpeed = snapshot.speed;
+        autoPausedSpeedRef.current = currentSpeed;
+        isAutoPausedRef.current = true;
+
+        pause();
+        SoundFX.playSpeciation();
+
+        setSapientCountdown(10);
+
+        if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
+        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+
+        let remaining = 10;
+        countdownIntervalRef.current = setInterval(() => {
+          remaining -= 1;
+          if (remaining > 0) {
+            setSapientCountdown(remaining);
+          } else {
+            if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+            countdownIntervalRef.current = null;
+          }
+        }, 1000);
+
+        autoPauseTimerRef.current = setTimeout(() => {
+          setSapientCountdown(null);
+          if (isAutoPausedRef.current) {
+            setSpeed(autoPausedSpeedRef.current as any);
+            start();
+            isAutoPausedRef.current = false;
+          }
+        }, 10000);
+      }
+    }
+  }, [
+    snapshot.speciationEvents,
+    snapshot.speciesSummaries,
+    snapshot.status,
+    snapshot.speed,
+    snapshot.rotations,
+    snapshot.generation,
+    pause,
+    start,
+    setSpeed,
+  ]);
+
+  // Clean up timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, []);
+
+  const handleResumeSapientPause = () => {
+    if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setSapientCountdown(null);
+    if (isAutoPausedRef.current) {
+      setSpeed(autoPausedSpeedRef.current as any);
+      start();
+      isAutoPausedRef.current = false;
+    }
+  };
+
+  const handleDismissSapientLog = (logId: string) => {
+    setSapientLogs((prev) => prev.filter((l) => l.id !== logId));
+  };
+
+  const handleDismissAllSapientLogs = () => {
+    setSapientLogs([]);
+  };
 
   // Auto-Save Lifecycle: restores on load, saves on exit / beforeunload / visibilitychange
   const { restoredToast, dismissToast } = useAutoSave({
@@ -101,8 +309,18 @@ export default function App() {
     setIsSoundMuted(nextMuted);
   };
 
+  const prevActiveDisasterIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const currentIds = new Set(snapshot.activeDisasters.map((d) => d.id));
+    for (const disaster of snapshot.activeDisasters) {
+      if (!prevActiveDisasterIdsRef.current.has(disaster.id)) {
+        SoundFX.playDisaster(disaster.type, disaster.severity);
+      }
+    }
+    prevActiveDisasterIdsRef.current = currentIds;
+  }, [snapshot.activeDisasters]);
+
   const handleTriggerDisaster = (disasterType: DisasterType, severity = 0.8) => {
-    SoundFX.playDisaster(disasterType, severity);
     triggerDisaster(disasterType, severity);
   };
 
@@ -293,6 +511,21 @@ export default function App() {
         }}
       />
 
+      {/* Persistent Bottom-Left Log for Sapient Intelligence Emergence (Auto-Pause 10s) */}
+      <SapientEvolutionLogHUD
+        logs={sapientLogs}
+        countdownSeconds={sapientCountdown}
+        savedSpeed={autoPausedSpeedRef.current}
+        onDismiss={handleDismissSapientLog}
+        onDismissAll={handleDismissAllSapientLogs}
+        onResumeNow={handleResumeSapientPause}
+        onSelectSpecies={(id) => {
+          setSelectedSpeciesId(id);
+          setActiveRightTab("species");
+          setIsRightDrawerOpen(true);
+        }}
+      />
+
       {/* Floating HUD toggle pill when HUDs are hidden (Cinematic mode) */}
       {!isHudVisible && (
         <button
@@ -314,6 +547,8 @@ export default function App() {
             activeDisasters={snapshot.activeDisasters}
             perturbations={snapshot.perturbations}
             onTriggerDisaster={handleTriggerDisaster}
+            autoDisastersEnabled={snapshot.autoDisastersEnabled ?? true}
+            onToggleAutoDisasters={setAutoDisasters}
           />
 
           {/* Top Header & Navigation Bar (Top-Left) */}

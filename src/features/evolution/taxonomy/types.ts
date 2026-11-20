@@ -44,6 +44,48 @@ export type PlanetaryLineage =
   | 'aero_atmospheric' // Nhánh Khí quyển Lơ lửng (Bọt khí - Khinh khí cầu sinh học)
   | 'radiotrophic_litho' // Nhánh Cương thạch Bức xạ (Giáp khoáng - Hấp thụ ion gamma)
 
+/**
+ * Thang phân loại sinh học Linnaean (Từ Giới đến Con người / Động vật có vú)
+ */
+export interface TaxonomicHierarchy {
+  readonly domainRank: string // Vực (Domain): Eukaryota / Prokaryota / Archaea
+  readonly kingdom: string // Giới (Kingdom): Animalia (Động vật) / Plantae / Fungi / Monera
+  readonly phylum: string // Ngành (Phylum): Chordata (Có dây sống) / Cnidaria / Porifera / Arthropoda...
+  readonly classRank: string // Lớp (Class): Mammalia (Động vật có vú/Thú) / Aves / Reptilia / Amphibia...
+  readonly orderRank: string // Bộ (Order): Primates (Linh trưởng) / Carnivora / Cetacea / Rodentia...
+  readonly familyRank: string // Họ (Family): Hominidae (Họ Người) / Felidae / Canidae / Pinaceae...
+  readonly genusRank: string // Chi (Genus): Homo / Panthera / Canis / Pinus...
+  readonly speciesRank: string // Loài (Species): Homo sapiens / Panthera leo / Pinus massoniana...
+}
+
+/**
+ * Đặc trưng sinh học và xã hội của Quần thể (Population Demographics)
+ */
+export interface PopulationDemographics {
+  readonly size: number // 1. Kích thước quần thể (Tổng số cá thể)
+  readonly densityPerCell: number // 2. Mật độ quần thể (Số cá thể / ô sinh quyển)
+  readonly sexRatio: { readonly malePct: number; readonly femalePct: number } // 3. Tỉ lệ giới tính (♂/♀)
+  readonly ageStructure: {
+    readonly preReproductivePct: number // 4a. Nhóm tuổi trước sinh sản (Non / Trẻ)
+    readonly reproductivePct: number // 4b. Nhóm tuổi đang sinh sản (Trưởng thành)
+    readonly postReproductivePct: number // 4c. Nhóm tuổi sau sinh sản (Già cỗi)
+  }
+  readonly distributionPattern: 'clumped' | 'uniform' | 'random' // 5. Kiểu phân bố (Theo nhóm, Đồng đều, Ngẫu nhiên)
+  readonly distributionLabel: string
+  readonly cellularGradeDetail?: {
+    readonly cellType: 'prokaryote' | 'eukaryote'
+    readonly cellTypeLabel: string
+    readonly specialization: string // Tế bào nhân sơ / Hàng nghìn tỷ tế bào nhân thực chuyên hóa
+  }
+  readonly socialTraits?: {
+    readonly isHumanoidOrSapient: boolean
+    readonly socialOrganization: string // Tổ chức xã hội (Gia đình, thị tộc, đô thị hóa, nền văn minh)
+    readonly toolUseAndTechnology: string // Chế tác công cụ phức tạp & Khoa học kỹ thuật
+    readonly culturalTransmission: string // Truyền đạt văn hóa, giáo dục & Ngôn ngữ qua thế hệ
+    readonly environmentalModification: string // Khả năng cải tạo môi trường sống chủ động (Y tế, nông nghiệp, kiến trúc)
+  }
+}
+
 export interface BiologicalTraits {
   readonly tier: EvolutionTier
   readonly tierLabel: string
@@ -55,7 +97,7 @@ export interface BiologicalTraits {
   readonly domainIcon: string
   readonly trophicRole: TrophicRole
   readonly trophicRoleLabel: string
-  readonly trophicLevel: number // 1 to 3
+  readonly trophicLevel: number // 1 to 5 (Bậc 1: Sản xuất -> Bậc 2: Tiêu thụ 1 -> Bậc 3: Tiêu thụ 2 -> Bậc 4: Tiêu thụ 3 -> Bậc 5: Đỉnh chuỗi/Động vật có vú/Sapient)
   readonly dietDescription: string
   readonly scientificName: string
   readonly planetaryLineage: PlanetaryLineage
@@ -68,6 +110,8 @@ export interface BiologicalTraits {
   readonly sapientLabel?: string
   readonly notableAdaptations: readonly string[]
   readonly complexityIndex: number // 0.0 to 1.0
+  readonly taxonomicHierarchy?: TaxonomicHierarchy
+  readonly demographics?: PopulationDemographics
 }
 
 export interface SpeciationEvent {

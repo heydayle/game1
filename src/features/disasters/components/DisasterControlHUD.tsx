@@ -11,12 +11,16 @@ interface DisasterControlHUDProps {
   activeDisasters: readonly ActiveDisasterSummary[]
   perturbations: EnvironmentalPerturbations
   onTriggerDisaster: (type: DisasterType, severity: number) => void
+  autoDisastersEnabled?: boolean
+  onToggleAutoDisasters?: (enabled: boolean) => void
 }
 
 export function DisasterControlHUD({
   activeDisasters,
   perturbations,
   onTriggerDisaster,
+  autoDisastersEnabled = true,
+  onToggleAutoDisasters,
 }: DisasterControlHUDProps) {
   const [severity, setSeverity] = useState<number>(0.8)
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false)
@@ -82,6 +86,34 @@ export function DisasterControlHUD({
             title="Thu gọn kho thiên tai"
           >
             <span>✕ Thu gọn</span>
+          </button>
+        </div>
+
+        {/* Natural Disasters Auto-Occurrence Toggle */}
+        <div className="p-3 border-b border-white/10 bg-black/40 flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>🎲</span>
+              <span>Thiên tai tự nhiên</span>
+            </span>
+            <span className="text-[10px] text-gray-400">
+              {autoDisastersEnabled ? 'Xuất hiện ngẫu nhiên theo chu kỳ' : 'Đã tắt (chỉ kích hoạt thủ công)'}
+            </span>
+          </div>
+          <button
+            data-testid="toggle-auto-disasters"
+            onClick={() => {
+              SoundFX.playClick()
+              onToggleAutoDisasters?.(!autoDisastersEnabled)
+            }}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border ${
+              autoDisastersEnabled
+                ? 'bg-emerald-600/90 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/30'
+                : 'bg-gray-800 text-gray-400 hover:text-white border-white/10'
+            }`}
+            title={autoDisastersEnabled ? 'Nhấp để tắt thiên tai tự nhiên ngẫu nhiên' : 'Nhấp để bật thiên tai tự nhiên ngẫu nhiên'}
+          >
+            {autoDisastersEnabled ? '● Đang BẬT' : '○ Đang TẮT'}
           </button>
         </div>
 
